@@ -1,4 +1,4 @@
-xss0rRecon
+then xss0rRecon
 
 Overview
 
@@ -31,6 +31,17 @@ Requirements
     - bash, coreutils, awk, grep, sort
     - Python 3.9+ recommended
     - Arjun (used for parameter discovery)
+
+Resuming a session after interruption
+
+    If your system shuts down or disconnects, you can resume from the last saved step (supported from step 7 onward):
+
+        # resume previous session
+        bash xss0rRecon.sh --resume
+
+    To clear any saved state:
+
+        bash xss0rRecon.sh --clear-state
 
 Quick start
 

@@ -66,6 +66,20 @@ detect_nproc() {
 }
 NPROC=$(detect_nproc)
 
+# Enable parallel sort if supported
+if sort --help 2>/dev/null | grep -q "--parallel"; then
+    SORT_PARALLEL_ARG="--parallel=${NPROC}"
+else
+    SORT_PARALLEL_ARG=""
+fi
+
+# Polling cadence for background analyses
+if [ "$FAST_MODE" = "1" ]; then
+    ANALYSIS_POLL_SECS=10
+else
+    ANALYSIS_POLL_SECS=30
+fi
+
 # Function to check if a command exists and is executable
 check_command() {
     if ! command -v "$1" &> /dev/null; then
@@ -260,6 +274,62 @@ domain_name=""
 last_completed_option=1
 skip_order_check_for_option_4=false
 total_merged_urls=0
+
+# Session resume state
+STATE_FILE=".xss0r_state"
+
+save_state() {
+    {
+        echo "domain_name=${domain_name}"
+        echo "last_completed_option=${last_completed_option}"
+        echo "timestamp=$(date +%s)"
+    } > "$STATE_FILE"
+}
+
+load_state() {
+    [ -f "$STATE_FILE" ] || return 1
+    # shellcheck disable=SC1090
+    . "$STATE_FILE" 2>/dev/null || return 1
+    return 0
+}
+
+clear_state() {
+    [ -f "$STATE_FILE" ] && rm -f "$STATE_FILE"
+}
+
+mark_step_completed() {
+    last_completed_option="$1"
+    save_state
+}
+
+resume_from_state() {
+    if ! load_state; then
+        echo -e "${YELLOW}No previous session state found to resume.${NC}"
+        return 1
+    fi
+    echo -e "${BOLD_BLUE}Resuming previous session for domain: ${domain_name} (last completed step: ${last_completed_option})${NC}"
+    next_step=$((last_completed_option + 1))
+    case "$next_step" in
+        7)
+            run_step_7
+            ;;
+        *)
+            echo -e "${YELLOW}Automatic resume is currently supported from step 7 only. Please continue via the menu from the next step.${NC}"
+            ;;
+    esac
+}
+
+# CLI helpers for resume/clear-state
+if [ "$1" = "--clear-state" ]; then
+    clear_state
+    echo -e "${BOLD_BLUE}Cleared saved session state.${NC}"
+    exit 0
+fi
+
+if [ "$1" = "--resume" ]; then
+    resume_from_state
+    exit 0
+fi
 
 # Function to run step 1 (Install all tools)
 install_tools() {
@@ -1697,7 +1767,7 @@ if [ -s arjun-urls.txt ]; then
     # Merge files and process .php links
 if [ -f arjun-urls.txt ] || [ -f output-php-links.txt ] || [ -f arjun_output.txt ]; then
     # Merge and extract only the base .php URLs, then remove duplicates
-    cat arjun-urls.txt output-php-links.txt arjun_output.txt 2>/dev/null | awk -F'?' '/\.php/ {print $1}' | sort -u > arjun-final.txt
+    cat arjun-urls.txt output-php-links.txt arjun_output.txt 2>/dev/null | awk -F'?' '/\.php/ {print $1}' | LC_ALL=C sort ${SORT_PARALLEL_ARG} -u > arjun-final.txt
 
     echo -e "${BOLD_BLUE}arjun-final.txt created successfully with merged and deduplicated links.${NC}"
 else
@@ -1744,7 +1814,8 @@ if [ -f arjun-final.txt ]; then
     mv "${domain_name}-links.txt" urls-ready.txt || handle_error "Renaming ${domain_name}-links.txt"
 fi
 
-# Automatically start step 7 after completing step 6
+# Mark step 6 completed and automatically start step 7
+mark_step_completed 6
 run_step_7
 }
 
@@ -1776,7 +1847,7 @@ analysis_pid=$!
 # Monitor the process in the background
 while kill -0 $analysis_pid 2> /dev/null; do
     echo -e "${BOLD_BLUE}Analysis tool is still running...⌛️${NC}"
-    sleep 30  # Check every 30 seconds
+    sleep ${ANALYSIS_POLL_SECS}  # Adaptive polling interval
 done
 
 # When finished
