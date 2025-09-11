@@ -73,9 +73,13 @@ PY
         fi
     fi
 
-    # 2) Try pipx if available (isolated venv for apps)
+    # 2) Try pipx via module invocation first (avoids broken shell shim)
+    if command -v python3 >/dev/null 2>&1 && python3 -c "import pipx" >/dev/null 2>&1; then
+        python3 -m pipx run arjun "$@" && return 0
+    fi
+    # If pipx module not importable, try shell command only if actually runnable
     if command -v pipx >/dev/null 2>&1; then
-        pipx run arjun "$@" && return 0
+        pipx --version >/dev/null 2>&1 && pipx run arjun "$@" && return 0
     fi
 
     # 3) Try system binary only if it appears runnable
@@ -85,7 +89,7 @@ PY
         fi
     fi
 
-    handle_error_with_solution "Arjun command" "Recommended on Kali/PEP668 systems: 'python3 -m venv .venv && source .venv/bin/activate && python3 -m pip install arjun' or 'pipx install arjun' then re-run. If using apt, first fix dpkg: 'sudo dpkg --configure -a' then 'sudo apt install arjun'."
+    handle_error_with_solution "Arjun command" "Recommended on Kali/PEP668 systems: 'python3 -m venv .venv && source .venv/bin/activate && python3 -m pip install arjun' or 'python3 -m pipx install arjun' (avoids broken /usr/local/bin/pipx shims) then re-run. If using apt, first fix dpkg: 'sudo dpkg --configure -a' then 'sudo apt install arjun'. If a stale '/usr/local/bin/arjun' exists with a bad interpreter, remove it: 'sudo rm -f /usr/local/bin/arjun'."
     return 1
 }
 
