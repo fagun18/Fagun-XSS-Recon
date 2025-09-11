@@ -6,7 +6,7 @@
 
 <p>
   <img alt="CI" src="https://img.shields.io/badge/ci-passing-brightgreen" />
-  <a href="https://xss0r.medium.com/tool-overview-6c255fe7ec9b"><img alt="Docs" src="https://img.shields.io/badge/docs-medium-1da1f2" /></a>
+  <a href="https://fagun.medium.com/tool-overview-6c255fe7ec9b"><img alt="Docs" src="https://img.shields.io/badge/docs-medium-1da1f2" /></a>
   <img alt="License" src="https://img.shields.io/badge/license-MIT-blue" />
 </p>
 
@@ -141,7 +141,7 @@ Typical flow:
 5. In‑depth URL filtering
 6. HiddenParamFinder / Arjun discovery and merge
 7. Prep URLs with query strings for XSS testing
-8. Launch xss0r (optional)
+8. Launch FagunXss (optional)
 
 Outputs:
 
@@ -184,8 +184,8 @@ Targets may not expose parameters; pipeline continues with fewer candidates.
 
 ## Links
 
-- Overview: https://xss0r.medium.com/tool-overview-6c255fe7ec9b
-- Store/downloads: https://store.xss0r.com
+- Overview: https://fagun.medium.com/tool-overview-6c255fe7ec9b
+- Store/downloads: https://store.fagun.com
 
 ---
 

@@ -26,10 +26,12 @@ def print_banner():
     banner = f"""
     {GREEN}#########################################{RESET}
     {GREEN}#                                       #
-    {GREEN}#        {BOLD}XSS Reflection Checker V2 {RESET}{GREEN}        #
-    {GREEN}#        {BOLD}Developed by Ibrahim{RESET}{GREEN}        #
+    {GREEN}#     {BOLD}Path Reflection Checker V1 {RESET}{GREEN}        #
+    {GREEN}#        {BOLD}Developed by Fagun{RESET}{GREEN}        #
     {GREEN}#                                       #
     {GREEN}#########################################{RESET}
+    {BOLD}Usage:{RESET}                                #
+    python path-reflection.py urls.txt --threads 2
     """
     print(banner)
 

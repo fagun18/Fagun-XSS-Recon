@@ -137,18 +137,19 @@ clear
 
 # Display banner
 echo -e "${BOLD_BLUE}"
-echo "               ___         ____                              _____ "
-echo "__  _____ ___ / _ \ _ __  |  _ \ ___  ___ ___  _ __   __   _|___ / "
-echo "\ \/ / __/ __| | | | '__| | |_) / _ \/ __/ _ \| '_ \  \ \ / / |_ \ "
-echo " >  <\__ \__ \ |_| | |    |  _ <  __/ (_| (_) | | | |  \ V / ___) |"
-echo "/_/\_\___/___/\___/|_|    |_| \_\___|\___\___/|_| |_|   \_/ |____/ "
-echo "                           FagunXssRecon v3"
+echo "███████╗ █████╗  ██████╗ ██╗   ██╗███╗   ██╗██╗  ██╗██╗  ██╗███████╗██╗  ██╗"
+echo "██╔════╝██╔══██╗██╔════╝ ██║   ██║████╗  ██║██║ ██╔╝██║ ██╔╝██╔════╝██║  ██║"
+echo "█████╗  ███████║██║  ███╗██║   ██║██╔██╗ ██║█████╔╝ █████╔╝ █████╗  ███████║"
+echo "██╔══╝  ██╔══██║██║   ██║██║   ██║██║╚██╗██║██╔═██╗ ██╔═██╗ ██╔══╝  ██╔══██║"
+echo "██║     ██║  ██║╚██████╔╝╚██████╔╝██║ ╚████║██║  ██╗██║  ██╗███████╗██║  ██║"
+echo "╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝"
+echo "                              FagunXssRecon v3"
 echo -e "${NC}"
 
 # Centered Contact Information
-echo -e "${BOLD_BLUE}                      Website: store.xss0r.com${NC}"
-echo -e "${BOLD_BLUE}                      Free BlindXSS Testing: xss0r.com${NC}"
-echo -e "${BOLD_BLUE}                      X: x.com/xss0r${NC}"
+echo -e "${BOLD_BLUE}                      Website: store.fagun.com${NC}"
+echo -e "${BOLD_BLUE}                      Free BlindXSS Testing: fagun.com${NC}"
+echo -e "${BOLD_BLUE}                      X: x.com/fagun${NC}"
 
 # Function to display options
 display_options() {
@@ -160,17 +161,17 @@ display_options() {
     echo -e "${YELLOW}5: In-depth URL Filtering${NC}"
     echo -e "${YELLOW}6: HiddenParamFinder${NC}"
     echo -e "${YELLOW}7: Preparing for XSS Detection and Query String URL Analysis${NC}"
-    echo -e "${YELLOW}8: Launching xss0r Tool${NC}"
+    echo -e "${YELLOW}8: Launching fagun Tool${NC}"
     echo -e "${YELLOW}9: Exit${NC}"
-    echo -e "${YELLOW}10: Guide to Deploying xss0r on VPS Servers${NC}"
+    echo -e "${YELLOW}10: Guide to Deploying fagun on VPS Servers${NC}"
     echo -e "${YELLOW}11: Path-based XSS${NC}"
     echo -e "${YELLOW}12: Domains Search Inputs${NC}"
 }
 
 
-# Function to display Guide to Deploying xss0r on VPS Servers information with better formatting and crystal-like color
+# Function to display Guide to Deploying fagun on VPS Servers information with better formatting and crystal-like color
 show_vps_info() {
-    echo -e "${CYAN}To run xss0r continuously on bug bounty programs and keep it running in the background, a VPS server is highly recommended.${NC}"
+    echo -e "${CYAN}To run fagun continuously on bug bounty programs and keep it running in the background, a VPS server is highly recommended.${NC}"
     echo -e "${CYAN}I personally recommend Contabo, which I've been using for the past three years. It has performed reliably without any restrictions.${NC}"
     echo -e "${CYAN}Additionally, the pricing is very competitive.${NC}\n"
     
@@ -181,16 +182,16 @@ show_vps_info() {
     
     echo -e "${CYAN}After completing the purchase, you can expect to receive your credentials via email within 15 minutes to 3 hours.${NC}\n"
     
-    echo -e "${CYAN}Next, update your VPS and install tmux to allow xss0r to run in the background.${NC}\n"
+    echo -e "${CYAN}Next, update your VPS and install tmux to allow fagun to run in the background.${NC}\n"
     
     echo -e "${CYAN}Below are the essential tmux commands:${NC}\n"
     
     echo -e "${CYAN}#### Start a new tmux session:${NC}"
     echo -e "${CYAN}apt install tmux                          # Install tmux${NC}"
-    echo -e "${CYAN}tmux new-session -s xss0r                 # Create a new tmux session${NC}"
-    echo -e "${CYAN}tmux attach-session -t xss0r              # Reattach to an existing tmux session from another terminal tab${NC}"
-    echo -e "${CYAN}tmux detach -s xss0r                      # Detach from the tmux session${NC}"
-    echo -e "${CYAN}tmux kill-session -t xss0r                # Terminate the xss0r tmux session${NC}"
+    echo -e "${CYAN}tmux new-session -s fagun                 # Create a new tmux session${NC}"
+    echo -e "${CYAN}tmux attach-session -t fagun              # Reattach to an existing tmux session from another terminal tab${NC}"
+    echo -e "${CYAN}tmux detach -s fagun                      # Detach from the tmux session${NC}"
+    echo -e "${CYAN}tmux kill-session -t fagun                # Terminate the fagun tmux session${NC}"
     echo -e "${CYAN}tmux kill-server                          # Terminate all tmux sessions${NC}"
     echo -e "${CYAN}tmux ls                                   # List all active tmux sessions${NC}\n"
     
@@ -249,8 +250,8 @@ echo -e "${CYAN}sudo apt clean                              # Clean up package c
 echo -e "${CYAN}sudo reboot                                 # Update changes to VPS server${NC}\n"
 
 
-# Steps for installing xss0r on VPS
-echo -e "${CYAN}#### Steps for installing xss0r on VPS:${NC}"
+# Steps for installing fagun on VPS
+echo -e "${CYAN}#### Steps for installing fagun on VPS:${NC}"
 
 echo -e "${CYAN}1. Install Cockpit                         ${NC} # Install Cockpit for VPS management"
 echo -e "${CYAN}2. Install Debian                          ${NC} # Install the Debian OS"
@@ -259,13 +260,13 @@ echo -e "${CYAN}4. deb http://asi-fs-d.contabo.net/debian bookworm main non-free
 echo -e "${CYAN}5. deb-src http://asi-fs-d.contabo.net/debian bookworm main non-free-firmware ${NC} # Change 'bookworm' to 'testing'"
 echo -e "${CYAN}6. Update & Upgrade                        ${NC} # sudo apt update && sudo apt install libc6 -y && sudo apt install gnome -y"
 echo -e "${CYAN}7. Install Kali OS                         ${NC} # Not needed any changes except updates & upgrades"
-echo -e "${CYAN}8. Upload all files to your VPS            ${NC} # Upload xss0r + xss0rRecon files"
-echo -e "${CYAN}9. chmod +x xss0r                          ${NC} # Add execute permission to the xss0r tool"
+echo -e "${CYAN}8. Upload all files to your VPS            ${NC} # Upload fagun + fagunRecon files"
+echo -e "${CYAN}9. chmod +x fagun                          ${NC} # Add execute permission to the fagun tool"
 echo -e "${CYAN}10. Install required Chrome version from the eBook ${NC} # Install the required Chrome version as outlined in the eBook"
-echo -e "${CYAN}11. Run xss0r and enter API License         ${NC} # Run xss0r tool and enter your API license"
-echo -e "${CYAN}12. Run xss0rRecon and install all tools   ${NC} # Run xss0rRecon and install necessary tools"
+echo -e "${CYAN}11. Run fagun and enter API License         ${NC} # Run fagun tool and enter your API license"
+echo -e "${CYAN}12. Run fagunRecon and install all tools   ${NC} # Run fagunRecon and install necessary tools"
 echo -e "${CYAN}13. Ensure all files in the same folder    ${NC} # Make sure all files are inside the same folder"
-echo -e "${CYAN}14. Run xss0r tool                         ${NC} # Launch and run xss0r tool"
+echo -e "${CYAN}14. Run fagun tool                         ${NC} # Launch and run fagun tool"
 
 }
 
@@ -276,7 +277,7 @@ skip_order_check_for_option_4=false
 total_merged_urls=0
 
 # Session resume state
-STATE_FILE=".xss0r_state"
+STATE_FILE=".fagun_state"
 
 save_state() {
     {
@@ -406,8 +407,8 @@ fi
     # Remove conflicting package if it exists
     sudo apt remove -y python3-structlog
 
-    # Set full permissions for the xss0rRecon script
-    sudo chmod 755 xss0rRecon.sh
+    # Set full permissions for the fagunRecon script
+    sudo chmod 755 fagunRecon.sh
 
     # Step 1: Install Python3 virtual environment and structlog in venv
     show_progress "Installing python3-venv and setting up virtual environment"
@@ -1186,22 +1187,22 @@ echo -e "\n\n"
 # Bold blue message surrounded by a rectangle of lines with extra spacing
 echo -e "${BOLD_BLUE}=============================================================================================${NC}"
 echo -e "${BOLD_BLUE}|                                                                                            |${NC}"
-echo -e "${BOLD_BLUE}|  NOTE: To use this tool, you must have the xss0r tool, which is an XSS detection           |${NC}"
+echo -e "${BOLD_BLUE}|  NOTE: To use this tool, you must have the fagun tool, which is an XSS detection           |${NC}"
 echo -e "${BOLD_BLUE}|  and exploitation tool for all types of XSS attacks, in the same directory.                |${NC}"
 echo -e "${BOLD_BLUE}|                                                                                            |${NC}"
-echo -e "${BOLD_BLUE}|  Alongside the xss0r tool, you'll also need two wordlists and a 2 Pythons reflection       |${NC}"
+echo -e "${BOLD_BLUE}|  Alongside the fagun tool, you'll also need two wordlists and a 2 Pythons reflection       |${NC}"
 echo -e "${BOLD_BLUE}|  detection tools. All of these can be found in any of the XSS plans available on the site. |${NC}"
 echo -e "${BOLD_BLUE}|                                                                                            |${NC}"
-echo -e "${BOLD_BLUE}|  You can get them by visiting: https://store.xss0r.com/ and purchasing any plan that       |${NC}"
+echo -e "${BOLD_BLUE}|  You can get them by visiting: https://store.fagun.com/ and purchasing any plan that       |${NC}"
 echo -e "${BOLD_BLUE}|  fits your needs.                                                                          |${NC}"
 echo -e "${BOLD_BLUE}|                                                                                            |${NC}"
-echo -e "${BOLD_BLUE}|  If you already have a plan, simply copy the xss0r tool, the wordlists, and the            |${NC}"
-echo -e "${BOLD_BLUE}|  reflection detection tool into the same folder where your xss0rRecon tool is located.     |${NC}"
+echo -e "${BOLD_BLUE}|  If you already have a plan, simply copy the fagun tool, the wordlists, and the            |${NC}"
+echo -e "${BOLD_BLUE}|  reflection detection tool into the same folder where your fagunRecon tool is located.     |${NC}"
 echo -e "${BOLD_BLUE}|                                                                                            |${NC}"
 echo -e "${BOLD_BLUE}|  Alternatively, if you don't have a plan or the tools, you can use the PRO plan for free   |${NC}"
 echo -e "${BOLD_BLUE}|  for 5 days each month from the 10th to the 15th.                                          |${NC}"
 echo -e "${BOLD_BLUE}|                                                                                            |${NC}"
-echo -e "${BOLD_BLUE}|  The release of the key is posted on the homepage banner at store.xss0r.com, but this      |${NC}"
+echo -e "${BOLD_BLUE}|  The release of the key is posted on the homepage banner at store.fagun.com, but this      |${NC}"
 echo -e "${BOLD_BLUE}|  option is only available for those who have not yet tested the tool.                      |${NC}"
 echo -e "${BOLD_BLUE}|                                                                                            |${NC}"
 echo -e "${BOLD_BLUE}=============================================================================================${NC}"
@@ -1255,7 +1256,7 @@ run_step_3() {
     fi
 
     echo -e "${BOLD_WHITE}You selected: Domain Enumeration and Filtering for $domain_name${NC}"
-    echo -e "${BOLD_WHITE}Do you want to use your own list of domains or xss0rRecon to find it for you? Enter Y for your list or N for xss0rRecon list - domain list must be in format ${domain_name}-domains.txt: ${NC}"
+    echo -e "${BOLD_WHITE}Do you want to use your own list of domains or fagunRecon to find it for you? Enter Y for your list or N for fagunRecon list - domain list must be in format ${domain_name}-domains.txt: ${NC}"
     read user_choice
 
     # Convert user input to uppercase
@@ -2066,16 +2067,16 @@ if [ -f "reflection.py" ]; then
             echo -e "${BOLD_WHITE}Initial Total Merged URLs in the beginning : ${RED}${total_merged_urls}${NC}"
             echo -e "${BOLD_WHITE}Filtered Final URLs for XSS Testing: ${RED}${total_urls}${NC}"
 
-            #Sorting URLs for xss0r:
-            echo -e "${BOLD_BLUE}Sorting valid format URLs for xss0r...${NC}"
+            #Sorting URLs for fagun:
+            echo -e "${BOLD_BLUE}Sorting valid format URLs for fagun...${NC}"
             awk '{sub("http://", "http://www."); sub("https://", "https://www."); print}' xss-urls.txt | sort -u > sorted-xss-urls.txt
             rm -r xss-urls.txt
             mv sorted-xss-urls.txt xss-urls.txt
             sleep 5
 
 
-            # Automatically run the xss0r command after reflection step
-            ./xss0r --get --urls xss-urls.txt --payloads payloads.txt --shuffle --threads 10 --path || handle_error "Launching xss0r Tool"
+            # Automatically run the fagun command after reflection step
+            ./fagun --get --urls xss-urls.txt --payloads payloads.txt --shuffle --threads 10 --path || handle_error "Launching fagun Tool"
         fi
     else
         echo -e "${RED}xss.txt not found. No reflective URLs identified.${NC}"
@@ -2087,32 +2088,32 @@ else
 fi
 }
 
-# Function to run step 8 (Launching xss0r Tool)
+# Function to run step 8 (Launching fagun Tool)
 run_step_8() {
-    echo -e "${BOLD_WHITE}You selected: Launching xss0r Tool for $domain_name${NC}"
+    echo -e "${BOLD_WHITE}You selected: Launching fagun Tool for $domain_name${NC}"
 
-    # Check if xss0r and xss-urls.txt files exist
-    if [ -f "xss0r" ] && [ -f "xss-urls.txt" ]; then
-        show_progress "Running xss0r for XSS vulnerabilities"
-        ./xss0r --get --urls xss-urls.txt --payloads payloads.txt --shuffle --threads 10 --path
-        if [[ $? -ne 0 ]]; then  # Check if xss0r command failed
-            echo -e "${RED}The xss0r Tool encountered an error during execution.${NC}"
+    # Check if fagun and xss-urls.txt files exist
+    if [ -f "fagun" ] && [ -f "xss-urls.txt" ]; then
+        show_progress "Running fagun for XSS vulnerabilities"
+        ./fagun --get --urls xss-urls.txt --payloads payloads.txt --shuffle --threads 10 --path
+        if [[ $? -ne 0 ]]; then  # Check if fagun command failed
+            echo -e "${RED}The fagun Tool encountered an error during execution.${NC}"
             exit 1
         fi
         sleep 5
-        echo -e "${BOLD_BLUE}xss0r completed. Check the output files for results.${NC}"
+        echo -e "${BOLD_BLUE}fagun completed. Check the output files for results.${NC}"
     else
-        # Custom error message when xss0r is missing
-        if [ ! -f "xss0r" ]; then
-            echo -e "${RED}The xss0r Tool is not present in the current directory.${NC}"
-            echo -e "${CYAN}Please ensure the xss0r tool is placed in the directory and run the script again.${NC}"
-            echo -e "${BOLD_WHITE}Alternatively, you can download or purchase the tool from store.xss0r.com. ${NC}"
-            echo -e "${BOLD_WHITE}After obtaining the tool, execute the xss0r to enter your API key, and then proceed with the xss0rRecon tool.${NC}"
+        # Custom error message when fagun is missing
+        if [ ! -f "fagun" ]; then
+            echo -e "${RED}The fagun Tool is not present in the current directory.${NC}"
+            echo -e "${CYAN}Please ensure the fagun tool is placed in the directory and run the script again.${NC}"
+            echo -e "${BOLD_WHITE}Alternatively, you can download or purchase the tool from store.fagun.com. ${NC}"
+            echo -e "${BOLD_WHITE}After obtaining the tool, execute the fagun to enter your API key, and then proceed with the fagunRecon tool.${NC}"
         fi
         
         # Check if xss-urls.txt file is missing
         if [ ! -f "xss-urls.txt" ]; then
-            echo -e "${RED}The xss-urls.txt file is not present in the current directory. Please make sure the file is generated or placed in the directory and try again. Alternatively, you can download or purchase the tool from store.xss0r.com. After obtaining the tool, execute the xss0r to enter your API key, and then proceed with the xss0rRecon tool.${NC}"
+            echo -e "${RED}The xss-urls.txt file is not present in the current directory. Please make sure the file is generated or placed in the directory and try again. Alternatively, you can download or purchase the tool from store.fagun.com. After obtaining the tool, execute the fagun to enter your API key, and then proceed with the fagunRecon tool.${NC}"
         fi
     fi
 }
@@ -2247,14 +2248,14 @@ run_path_based_xss() {
 
     echo -e "${CYAN}Intermediate files deleted. Final output is $output_file.${NC}"
 
-    # Step 12: Launch the xss0r tool for path-based XSS testing
-    echo -e "${BOLD_BLUE}Launching the xss0r tool on path-xss-urls.txt...${NC}"
-    ./xss0r --get --urls path-xss-urls.txt --payloads payloads.txt --shuffle --threads 10 --path
+    # Step 12: Launch the fagun tool for path-based XSS testing
+    echo -e "${BOLD_BLUE}Launching the fagun tool on path-xss-urls.txt...${NC}"
+    ./fagun --get --urls path-xss-urls.txt --payloads payloads.txt --shuffle --threads 10 --path
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}The xss0r tool encountered an error during execution.${NC}"
+        echo -e "${RED}The fagun tool encountered an error during execution.${NC}"
         exit 1
     else
-        echo -e "${BOLD_GREEN}xss0r tool executed successfully! Check the output for results.${NC}"
+        echo -e "${BOLD_GREEN}fagun tool executed successfully! Check the output for results.${NC}"
     fi
 }
 
@@ -2407,12 +2408,12 @@ if [[ -f $reflection_script ]]; then
     sudo python3 "$reflection_script" "$output_file" --threads 3
     echo -e "${BOLD_GREEN}Reflection done, new domains saved in the file xss.txt.${NC}"
 
-        # Run the xss0r command
-        if [[ -x ./xss0r ]]; then
-            echo -e "${BOLD_BLUE}Running xss0r Tool:${NC}"
-            ./xss0r --get --urls xss.txt --payloads payloads.txt --shuffle --threads 10
+        # Run the fagun command
+        if [[ -x ./fagun ]]; then
+            echo -e "${BOLD_BLUE}Running fagun Tool:${NC}"
+            ./fagun --get --urls xss.txt --payloads payloads.txt --shuffle --threads 10
         else
-            echo -e "${RED}xss0r executable not found in the current directory.${NC}"
+            echo -e "${RED}fagun executable not found in the current directory.${NC}"
         fi
     else
         echo -e "${RED}Reflection script $reflection_script not found.${NC}"
@@ -2505,7 +2506,7 @@ while true; do
             exit 0
             ;;
         10)
-            echo -e "${BOLD_WHITE}You selected: Guide to Deploying xss0r on VPS Servers${NC}"
+            echo -e "${BOLD_WHITE}You selected: Guide to Deploying fagun on VPS Servers${NC}"
             show_vps_info
             ;;
        11) # Execute Path-based XSS
