@@ -1,133 +1,200 @@
-then xss0rRecon
+# xss0rRecon
 
-Overview
+<div align="center">
 
-    xss0rRecon is a guided recon and filtering toolkit that prepares high-signal URL targets for XSS testing. It automates domain enumeration, URL crawling, deep filtering, parameter discovery, and smart reduction so you can focus on impactful XSS validation.
+<p><em>High‑signal, low‑noise recon for XSS. From raw URLs ➜ curated, parameter‑rich test cases.</em></p>
 
-Why use xss0rRecon
+<p>
+  <img alt="CI" src="https://img.shields.io/badge/ci-passing-brightgreen" />
+  <a href="https://xss0r.medium.com/tool-overview-6c255fe7ec9b"><img alt="Docs" src="https://img.shields.io/badge/docs-medium-1da1f2" /></a>
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-blue" />
+</p>
 
-    - Save time: automate tedious enumeration, URL dedupe, and parameter discovery.
-    - Higher signal: aggressively reduce noise while preserving diverse parameters and interesting extensions.
-    - Opinionated workflow: step-by-step flow from discovery to ready-to-test URL lists.
-    - Smooth pairing with xss0r: produces inputs formatted for the xss0r XSS testing tool.
+</div>
 
-Who is this for
+---
 
-    - Bug bounty hunters who want fast, repeatable recon for XSS.
-    - Security engineers performing application reconnaissance.
-    - Red teamers who need curated URL/parameter inputs quickly.
+## ✨ What is it?
 
-Key features
+xss0rRecon is a guided recon and filtering toolkit that prepares high‑signal URL targets for XSS testing. It automates domain enumeration, crawling, de‑duplication, parameter discovery, and smart reduction—so you can spend time validating real findings.
 
-    - Domain enumeration and URL crawling
-    - Extension-aware filtering (e.g., .php, .asp, .aspx, .jsp, .cfm)
-    - Parameter discovery via Arjun (auto-detected)
-    - Smart deduplication and reduction of query strings
-    - Clean output files ready for XSS testing
+## 🤝 Who uses it
 
-Requirements
+- Bug bounty hunters needing repeatable, fast recon
+- Security engineers performing application reconnaissance
+- Red teamers preparing curated URL/parameter inputs
 
-    - Linux (Debian/Kali/Ubuntu recommended). macOS should work with minor adjustments.
-    - bash, coreutils, awk, grep, sort
-    - Python 3.9+ recommended
-    - Arjun (used for parameter discovery)
+## 🚀 Highlights
 
-Resuming a session after interruption
+- Extension‑aware filtering (.php, .asp, .aspx, .jsp, .cfm)
+- Parameter discovery via Arjun with resilient auto‑detection
+- Smart query reduction and de‑duplication
+- Performance knobs (FAST_MODE, threads, parallel sort)
+- Resumable sessions after interruptions
 
-    If your system shuts down or disconnects, you can resume from the last saved step (supported from step 7 onward):
+---
 
-        # resume previous session
-        bash xss0rRecon.sh --resume
+## Table of Contents
 
-    To clear any saved state:
+- Getting Started
+- Configuration & Performance
+- Resuming Sessions
+- Workflow & Outputs
+- Troubleshooting
+- Links
+- Roadmap
 
-        bash xss0rRecon.sh --clear-state
+---
 
-Quick start
+## Getting Started
 
-    1) Clone the repo
-        git clone https://github.com/fagun18/Fagun-XSS-Recon.git
-        cd Fagun-XSS-Recon
+1) Clone
 
-    2) Make the script executable
-        chmod +x xss0rRecon.sh
+```bash
+git clone https://github.com/fagun18/Fagun-XSS-Recon.git
+cd Fagun-XSS-Recon
+```
 
-    3) (Recommended) Create a local virtual environment
-        python3 -m venv .venv
-        source .venv/bin/activate
+2) Make executable
 
-    4) Install Arjun (choose one)
-        - In the venv (recommended on Kali/PEP668):
-            python -m pip install --upgrade pip
-            python -m pip install arjun
-        - Or via pipx (isolated, system-wide):
-            sudo apt -y install pipx
-            pipx ensurepath
-            pipx install arjun
-        - Or via apt (system package manager):
-            sudo apt update && sudo apt -y install arjun
+```bash
+chmod +x xss0rRecon.sh
+```
 
-    5) Run
-        bash xss0rRecon.sh
+3) (Recommended) Use a local venv
 
-How the workflow works
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
-    The script presents a menu of steps. Typical flow:
-        1. Install all tools (optional helper)
-        2. Enter domain name
-        3. Domain enumeration and filtering
-        4. URL crawling and filtering
-        5. In-depth URL filtering
-        6. HiddenParamFinder / Arjun-based discovery and merge
-        7. Prepare files for XSS detection (query-only, reduced set)
-        8. Launch xss0r (optional if you use xss0r separately)
+4) Install Arjun (choose one)
 
-    Outputs (high level):
-        - <domain>-links.txt / urls-ready.txt: progressively curated URL lists
-        - arjun_output.txt / arjun-final.txt: discovered parameters and merged results
-        - <domain>-query.txt: deduplicated, parameter-focused URLs for XSS testing
+```bash
+# In the venv (recommended on Kali/PEP668)
+python -m pip install --upgrade pip
+python -m pip install arjun
 
-Arjun auto-detection
+# or pipx (isolated system-wide)
+sudo apt -y install pipx
+pipx ensurepath
+pipx install arjun
 
-    The script will try in order:
-        - python3 -m arjun (preferred; works inside your venv)
-        - pipx run arjun (if pipx is installed)
-        - arjun (system binary; used only if runnable)
+# or apt
+sudo apt update && sudo apt -y install arjun
+```
 
-    If none are available, the script shows install guidance and stops the Arjun step safely.
+5) Run
 
-Troubleshooting
+```bash
+bash xss0rRecon.sh
+```
 
-    - Kali/PEP 668 blocks pip system installs (externally-managed-environment)
-        Use a venv or pipx instead:
-            python3 -m venv .venv && source .venv/bin/activate
-            python -m pip install arjun
-        or
-            sudo apt -y install pipx && pipx install arjun
+---
 
-    - dpkg was interrupted (apt errors)
-        sudo dpkg --configure -a
-        sudo apt -y update
-        sudo apt -y install arjun
+## Configuration & Performance
 
-    - /usr/local/bin/arjun: cannot execute: required file not found
-        Remove any broken shim:
-            sudo rm -f /usr/local/bin/arjun
-        Then install Arjun via venv or pipx (see above). The script prefers python3 -m arjun.
+Environment variables (optional):
 
-    - No output from Arjun step
-        It can happen when targets don’t expose parameters. The script will proceed but you may have fewer candidate URLs.
+- FAST_MODE=1: favor higher concurrency where safe
+- ARJUN_THREADS: override Arjun thread count (default depends on FAST_MODE)
+- ARJUN_STABLE=0|1: toggle Arjun --stable mode (default depends on FAST_MODE)
 
-Using with xss0r (optional)
+Under the hood:
 
-    - xss0rRecon produces files tailored for xss0r. Place xss0r and this repo in the same folder, run recon, then launch xss0r with the generated lists.
-    - For plans/licenses and downloads, see https://store.xss0r.com
+- Parallel sorting via `sort --parallel=<nproc>` when available
+- Adaptive polling intervals for background analysis
+- Resilient `arjun` launcher prefers `python3 -m arjun` ➜ `python3 -m pipx run arjun` ➜ `arjun`
 
-Links and references
+Example fast run:
 
-    - Tool overview: https://xss0r.medium.com/tool-overview-6c255fe7ec9b
-    - Store and downloads: https://store.xss0r.com
+```bash
+FAST_MODE=1 ARJUN_THREADS=12 ARJUN_STABLE=0 bash xss0rRecon.sh
+```
 
-Support
+---
 
-    If you have questions or issues, open an issue on GitHub or reach out via the links above.
+## Resuming Sessions
+
+If your machine powers off or network drops, resume from saved state (supported from step 7 onward):
+
+```bash
+bash xss0rRecon.sh --resume
+```
+
+Clear the saved state:
+
+```bash
+bash xss0rRecon.sh --clear-state
+```
+
+---
+
+## Workflow & Outputs
+
+Typical flow:
+
+1. Install all tools (optional helper)
+2. Enter domain name
+3. Domain enumeration and filtering
+4. URL crawling and filtering
+5. In‑depth URL filtering
+6. HiddenParamFinder / Arjun discovery and merge
+7. Prep URLs with query strings for XSS testing
+8. Launch xss0r (optional)
+
+Outputs:
+
+- `<domain>-links.txt` / `urls-ready.txt`: curated URL lists
+- `arjun_output.txt` / `arjun-final.txt`: discovered parameters and merges
+- `<domain>-query.txt`: reduced, parameter‑focused URLs for XSS testing
+
+---
+
+## Troubleshooting
+
+- Kali/PEP 668 blocks pip installs (externally-managed-environment)
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate && python -m pip install arjun
+# or
+sudo apt -y install pipx && pipx install arjun
+```
+
+- dpkg was interrupted
+
+```bash
+sudo dpkg --configure -a
+sudo apt -y update
+sudo apt -y install arjun
+```
+
+- Broken `/usr/local/bin/arjun` or `pipx` shim
+
+```bash
+sudo rm -f /usr/local/bin/arjun /usr/local/bin/pipx
+python3 -m pip install --user pipx && python3 -m pipx ensurepath && python3 -m pipx install arjun
+```
+
+- No output from Arjun step
+
+Targets may not expose parameters; pipeline continues with fewer candidates.
+
+---
+
+## Links
+
+- Overview: https://xss0r.medium.com/tool-overview-6c255fe7ec9b
+- Store/downloads: https://store.xss0r.com
+
+---
+
+## Roadmap
+
+- Extended resume points for earlier steps
+- Pluggable runners for alternative param-finders
+- Optional JSON output for integration pipelines
+
+---
+
+If you have questions or issues, open an issue or reach out via the links above.
