@@ -51,6 +51,35 @@ check_command() {
     fi
 }
 
+# Locate and run Arjun robustly (binary or python module)
+run_arjun_cmd() {
+    # Usage: run_arjun_cmd <args...>
+    if command -v arjun >/dev/null 2>&1; then
+        arjun "$@" && return 0
+    fi
+
+    if command -v python3 >/dev/null 2>&1 && python3 - <<'PY' >/dev/null 2>&1
+import importlib
+import sys
+sys.exit(0 if importlib.util.find_spec('arjun') else 1)
+PY
+    then
+        python3 -m arjun "$@" && return 0
+    fi
+
+    if command -v python >/dev/null 2>&1 && python - <<'PY' >/dev/null 2>&1
+import importlib
+import sys
+sys.exit(0 if importlib.util.find_spec('arjun') else 1)
+PY
+    then
+        python -m arjun "$@" && return 0
+    fi
+
+    handle_error_with_solution "Arjun command" "Install Arjun with: 'pip3 install arjun' (recommended) or 'apt install arjun'. If installed but still failing, ensure Python is available and try running via 'python3 -m arjun'."
+    return 1
+}
+
 # Clear the terminal
 clear
 
@@ -1615,7 +1644,7 @@ show_progress "Completed cleaning arjun-urls.txt. All URLs are now clean, unique
     # Step 2: Running Arjun on clean URLs if arjun-urls.txt is present
 if [ -s arjun-urls.txt ]; then
     show_progress "Running Arjun on clean URLs"
-    arjun -i arjun-urls.txt -oT arjun_output.txt -t 10 -w parametri.txt || handle_error "Arjun command"
+    run_arjun_cmd -i arjun-urls.txt -oT arjun_output.txt -t 10 -w parametri.txt || handle_error "Arjun command"
 
     # Merge files and process .php links
 if [ -f arjun-urls.txt ] || [ -f output-php-links.txt ] || [ -f arjun_output.txt ]; then

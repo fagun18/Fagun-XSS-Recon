@@ -19,3 +19,15 @@ To use xss0rRecon effectively, it's essential that all required files are downlo
         With everything in place, you’re now ready to run xss0rRecon and start your recon tasks! 💻
 
 If you have any questions or run into issues, feel free to reach out to me.
+
+Additional notes (Arjun dependency):
+
+    xss0rRecon uses Arjun for parameter discovery. The script now auto-detects Arjun via the arjun binary or python -m arjun.
+
+    If you see an error like: cannot execute: required file not found
+        Install Arjun with one of the following:
+            pip3 install arjun
+            # or on Debian/Ubuntu
+            sudo apt install arjun
+
+    After installation, simply re-run xss0rRecon. The script will pick up whichever Arjun form is available.
