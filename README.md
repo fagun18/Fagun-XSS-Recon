@@ -1,4 +1,4 @@
-# xss0rRecon
+# FagunXssRecon
 
 <div align="center">
 
@@ -16,7 +16,7 @@
 
 ## ✨ What is it?
 
-xss0rRecon is a guided recon and filtering toolkit that prepares high‑signal URL targets for XSS testing. It automates domain enumeration, crawling, de‑duplication, parameter discovery, and smart reduction—so you can spend time validating real findings.
+FagunXssRecon is a guided recon and filtering toolkit that prepares high‑signal URL targets for XSS testing. It automates domain enumeration, crawling, de‑duplication, parameter discovery, and smart reduction—so you can spend time validating real findings.
 
 ## 🤝 Who uses it
 
@@ -58,7 +58,7 @@ cd Fagun-XSS-Recon
 2) Make executable
 
 ```bash
-chmod +x xss0rRecon.sh
+chmod +x FagunXssRecon.sh
 ```
 
 3) (Recommended) Use a local venv
@@ -87,7 +87,7 @@ sudo apt update && sudo apt -y install arjun
 5) Run
 
 ```bash
-bash xss0rRecon.sh
+bash FagunXssRecon.sh
 ```
 
 ---
@@ -109,7 +109,7 @@ Under the hood:
 Example fast run:
 
 ```bash
-FAST_MODE=1 ARJUN_THREADS=12 ARJUN_STABLE=0 bash xss0rRecon.sh
+FAST_MODE=1 ARJUN_THREADS=12 ARJUN_STABLE=0 bash FagunXssRecon.sh
 ```
 
 ---
@@ -119,13 +119,13 @@ FAST_MODE=1 ARJUN_THREADS=12 ARJUN_STABLE=0 bash xss0rRecon.sh
 If your machine powers off or network drops, resume from saved state (supported from step 7 onward):
 
 ```bash
-bash xss0rRecon.sh --resume
+bash FagunXssRecon.sh --resume
 ```
 
 Clear the saved state:
 
 ```bash
-bash xss0rRecon.sh --clear-state
+bash FagunXssRecon.sh --clear-state
 ```
 
 ---
