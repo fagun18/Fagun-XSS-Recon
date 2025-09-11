@@ -54,29 +54,38 @@ check_command() {
 # Locate and run Arjun robustly (binary or python module)
 run_arjun_cmd() {
     # Usage: run_arjun_cmd <args...>
+
+    # 1) Prefer Python module within current Python (works in venvs)
+    if command -v python3 >/dev/null 2>&1; then
+        if python3 - <<'PY' >/dev/null 2>&1
+import importlib
+import sys
+sys.exit(0 if importlib.util.find_spec('arjun') else 1)
+PY
+        then
+            python3 -m arjun "$@" && return 0
+        else
+            # If in a venv, try auto-installing into it (Kali/PEP668 safe)
+            if [ -n "$VIRTUAL_ENV" ]; then
+                python3 -m pip install --quiet arjun >/dev/null 2>&1 || true
+                python3 -m arjun "$@" && return 0
+            fi
+        fi
+    fi
+
+    # 2) Try pipx if available (isolated venv for apps)
+    if command -v pipx >/dev/null 2>&1; then
+        pipx run arjun "$@" && return 0
+    fi
+
+    # 3) Try system binary only if it appears runnable
     if command -v arjun >/dev/null 2>&1; then
-        arjun "$@" && return 0
+        if arjun --help >/dev/null 2>&1; then
+            arjun "$@" && return 0
+        fi
     fi
 
-    if command -v python3 >/dev/null 2>&1 && python3 - <<'PY' >/dev/null 2>&1
-import importlib
-import sys
-sys.exit(0 if importlib.util.find_spec('arjun') else 1)
-PY
-    then
-        python3 -m arjun "$@" && return 0
-    fi
-
-    if command -v python >/dev/null 2>&1 && python - <<'PY' >/dev/null 2>&1
-import importlib
-import sys
-sys.exit(0 if importlib.util.find_spec('arjun') else 1)
-PY
-    then
-        python -m arjun "$@" && return 0
-    fi
-
-    handle_error_with_solution "Arjun command" "Install Arjun with: 'pip3 install arjun' (recommended) or 'apt install arjun'. If installed but still failing, ensure Python is available and try running via 'python3 -m arjun'."
+    handle_error_with_solution "Arjun command" "Recommended on Kali/PEP668 systems: 'python3 -m venv .venv && source .venv/bin/activate && python3 -m pip install arjun' or 'pipx install arjun' then re-run. If using apt, first fix dpkg: 'sudo dpkg --configure -a' then 'sudo apt install arjun'."
     return 1
 }
 
