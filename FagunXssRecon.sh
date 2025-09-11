@@ -54,6 +54,12 @@ else
     ARJUN_STABLE=${ARJUN_STABLE:-1}
 fi
 
+# Discovery feature toggles (OFF by default)
+ENABLE_KATANA=${ENABLE_KATANA:-0}
+ENABLE_GAU=${ENABLE_GAU:-0}
+ENABLE_WAYBACK=${ENABLE_WAYBACK:-0}
+ENABLE_HTTPX=${ENABLE_HTTPX:-0}
+
 # Detect CPU cores for parallel sort/operations
 detect_nproc() {
     if command -v nproc >/dev/null 2>&1; then
@@ -129,6 +135,53 @@ PY
     fi
 
     handle_error_with_solution "Arjun command" "Recommended on Kali/PEP668 systems: 'python3 -m venv .venv && source .venv/bin/activate && python3 -m pip install arjun' or 'python3 -m pipx install arjun' (avoids broken /usr/local/bin/pipx shims) then re-run. If using apt, first fix dpkg: 'sudo dpkg --configure -a' then 'sudo apt install arjun'. If a stale '/usr/local/bin/arjun' exists with a bad interpreter, remove it: 'sudo rm -f /usr/local/bin/arjun'."
+    return 1
+}
+
+# --- Discovery wrappers (auto-detect, fail-soft) ---
+run_katana() {
+    # Usage: run_katana <input_file> <output_file>
+    local input_file="$1"; local output_file="$2"; local threads_flag=""
+    [ -z "$input_file" ] || [ -z "$output_file" ] && return 1
+    if command -v katana >/dev/null 2>&1; then
+        [ "$FAST_MODE" = "1" ] && threads_flag="-c ${NPROC}"
+        katana -list "$input_file" -o "$output_file" $threads_flag 2>/dev/null || return 1
+        return 0
+    fi
+    return 1
+}
+
+run_gau() {
+    # Usage: run_gau <domains_file> <output_file>
+    local domains_file="$1"; local output_file="$2"
+    [ -z "$domains_file" ] || [ -z "$output_file" ] && return 1
+    if command -v gau >/dev/null 2>&1; then
+        gau --subs --providers wayback,otx,urlscan,commoncrawl -o "$output_file" -sf "$domains_file" 2>/dev/null || return 1
+        return 0
+    fi
+    return 1
+}
+
+run_waybackurls() {
+    # Usage: run_waybackurls <domains_file> <output_file>
+    local domains_file="$1"; local output_file="$2"
+    [ -z "$domains_file" ] || [ -z "$output_file" ] && return 1
+    if command -v waybackurls >/dev/null 2>&1; then
+        waybackurls < "$domains_file" > "$output_file" 2>/dev/null || return 1
+        return 0
+    fi
+    return 1
+}
+
+run_httpx_alive() {
+    # Usage: run_httpx_alive <input_file> <output_file>
+    local input_file="$1"; local output_file="$2"; local rate_flag=""
+    [ -z "$input_file" ] || [ -z "$output_file" ] && return 1
+    if command -v httpx >/dev/null 2>&1; then
+        [ "$FAST_MODE" = "1" ] && rate_flag="-rate ${NPROC}"
+        httpx -l "$input_file" -silent -nc -status-code -follow-redirects -tech-detect $rate_flag | awk '{print $1}' > "$output_file" 2>/dev/null || return 1
+        return 0
+    fi
     return 1
 }
 
@@ -1749,6 +1802,50 @@ show_progress "Completed cleaning arjun-urls.txt. All URLs are now clean, unique
 
     echo -e "${BOLD_BLUE}URLs prepared successfully and files created.${NC}"
     echo -e "${BOLD_BLUE}arjun-urls.txt and output-php-links.txt have been created.${NC}"
+
+    # Optional discovery enrichment before Arjun
+    show_progress "Optional discovery enrichment (katana/gau/wayback)"
+    tmp_discovery_all="discovery-temp.txt"
+    > "$tmp_discovery_all"
+
+    if [ "$ENABLE_KATANA" = "1" ]; then
+        if run_katana arjun-urls.txt katana.out; then
+            cat katana.out >> "$tmp_discovery_all"
+        else
+            echo -e "${YELLOW}katana not available or failed. Skipping.${NC}"
+        fi
+    fi
+
+    if [ "$ENABLE_GAU" = "1" ] && [ -f "${domain_name}-domains.txt" ]; then
+        if run_gau "${domain_name}-domains.txt" gau.out; then
+            cat gau.out >> "$tmp_discovery_all"
+        else
+            echo -e "${YELLOW}gau not available or failed. Skipping.${NC}"
+        fi
+    fi
+
+    if [ "$ENABLE_WAYBACK" = "1" ] && [ -f "${domain_name}-domains.txt" ]; then
+        if run_waybackurls "${domain_name}-domains.txt" wayback.out; then
+            cat wayback.out >> "$tmp_discovery_all"
+        else
+            echo -e "${YELLOW}waybackurls not available or failed. Skipping.${NC}"
+        fi
+    fi
+
+    # Merge discovery outputs into arjun-urls.txt (extension-aware)
+    if [ -s "$tmp_discovery_all" ]; then
+        cat "$tmp_discovery_all" | grep -E "\.php($|\s|\?|&|#|/|\.)|\.asp($|\s|\?|&|#|/|\.)|\.aspx($|\s|\?|&|#|/|\.)|\.cfm($|\s|\?|&|#|/|\.)|\.jsp($|\s|\?|&|#|/|\.)" | awk -F'\?' '{print $1}' | LC_ALL=C sort ${SORT_PARALLEL_ARG} -u | awk '!seen[$0]++' >> arjun-urls.txt
+        LC_ALL=C sort ${SORT_PARALLEL_ARG} -u arjun-urls.txt -o arjun-urls.txt
+    fi
+
+    # Optionally pre-filter with httpx for liveness
+    if [ "$ENABLE_HTTPX" = "1" ]; then
+        if run_httpx_alive arjun-urls.txt arjun-urls-alive.txt; then
+            mv arjun-urls-alive.txt arjun-urls.txt
+        else
+            echo -e "${YELLOW}httpx not available or failed. Continuing without pre-filter.${NC}"
+        fi
+    fi
 
     # Step 2: Running Arjun on clean URLs if arjun-urls.txt is present
 if [ -s arjun-urls.txt ]; then
