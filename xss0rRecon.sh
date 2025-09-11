@@ -41,6 +41,31 @@ show_progress() {
     echo -e "${BOLD_BLUE}Current process: $1...⌛️${NC}"
 }
 
+# Performance tuning knobs (override via env):
+#   FAST_MODE=1            -> prefer higher concurrency where safe
+#   ARJUN_THREADS=<num>    -> override threads for Arjun (default depends on FAST_MODE)
+#   ARJUN_STABLE=0|1       -> enable Arjun --stable mode (default depends on FAST_MODE)
+FAST_MODE=${FAST_MODE:-0}
+if [ "$FAST_MODE" = "1" ]; then
+    ARJUN_THREADS=${ARJUN_THREADS:-12}
+    ARJUN_STABLE=${ARJUN_STABLE:-0}
+else
+    ARJUN_THREADS=${ARJUN_THREADS:-2}
+    ARJUN_STABLE=${ARJUN_STABLE:-1}
+fi
+
+# Detect CPU cores for parallel sort/operations
+detect_nproc() {
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+    elif command -v getconf >/dev/null 2>&1; then
+        getconf _NPROCESSORS_ONLN
+    else
+        echo 2
+    fi
+}
+NPROC=$(detect_nproc)
+
 # Function to check if a command exists and is executable
 check_command() {
     if ! command -v "$1" &> /dev/null; then
@@ -1657,8 +1682,13 @@ show_progress "Completed cleaning arjun-urls.txt. All URLs are now clean, unique
     # Step 2: Running Arjun on clean URLs if arjun-urls.txt is present
 if [ -s arjun-urls.txt ]; then
     show_progress "Running Arjun on clean URLs"
-    # Use stable mode and fewer threads to avoid rate limits/connection resets
-    if ! run_arjun_cmd -i arjun-urls.txt -oT arjun_output.txt --stable -t 2 -w parametri.txt; then
+    # Choose stability and thread flags based on tuning knobs
+    ARJUN_FLAGS="-t ${ARJUN_THREADS} -w parametri.txt"
+    if [ "${ARJUN_STABLE}" = "1" ]; then
+        ARJUN_FLAGS="--stable ${ARJUN_FLAGS}"
+    fi
+
+    if ! run_arjun_cmd -i arjun-urls.txt -oT arjun_output.txt ${ARJUN_FLAGS}; then
         echo -e "${YELLOW}Arjun encountered errors. Continuing without Arjun output.${NC}"
         # Ensure downstream steps have an expected file
         : > arjun_output.txt
