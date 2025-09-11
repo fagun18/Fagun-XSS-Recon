@@ -1657,7 +1657,12 @@ show_progress "Completed cleaning arjun-urls.txt. All URLs are now clean, unique
     # Step 2: Running Arjun on clean URLs if arjun-urls.txt is present
 if [ -s arjun-urls.txt ]; then
     show_progress "Running Arjun on clean URLs"
-    run_arjun_cmd -i arjun-urls.txt -oT arjun_output.txt -t 10 -w parametri.txt || handle_error "Arjun command"
+    # Use stable mode and fewer threads to avoid rate limits/connection resets
+    if ! run_arjun_cmd -i arjun-urls.txt -oT arjun_output.txt --stable -t 2 -w parametri.txt; then
+        echo -e "${YELLOW}Arjun encountered errors. Continuing without Arjun output.${NC}"
+        # Ensure downstream steps have an expected file
+        : > arjun_output.txt
+    fi
 
     # Merge files and process .php links
 if [ -f arjun-urls.txt ] || [ -f output-php-links.txt ] || [ -f arjun_output.txt ]; then
