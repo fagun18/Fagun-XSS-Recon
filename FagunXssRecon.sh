@@ -14,9 +14,9 @@ else
     echo "python3-venv is already installed."
 fi
 
-# Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+# Create and activate virtual environment (cross-platform)
+create_venv
+activate_venv
 
 # Function to handle errors with manual installation solutions
 handle_error_with_solution() {
@@ -141,31 +141,96 @@ check_command() {
     fi
 }
 
-# Locate and run Arjun robustly (binary or python module)
+# Detect Python command (cross-platform compatibility)
+detect_python_cmd() {
+    # Try python3 first (Linux/macOS)
+    if command -v python3 >/dev/null 2>&1; then
+        echo "python3"
+        return 0
+    fi
+    # Fallback to python (Windows)
+    if command -v python >/dev/null 2>&1; then
+        echo "python"
+        return 0
+    fi
+    return 1
+}
+
+# Run Python script with cross-platform compatibility
+run_python_script() {
+    # Usage: run_python_script <script> [args...]
+    local PYTHON_CMD=$(detect_python_cmd)
+    if [ $? -ne 0 ]; then
+        handle_error "Python command not found"
+        return 1
+    fi
+    
+    # Check if we're on Windows (no sudo command)
+    if command -v sudo >/dev/null 2>&1; then
+        # Linux/macOS - use sudo
+        sudo $PYTHON_CMD "$@"
+    else
+        # Windows - run directly
+        $PYTHON_CMD "$@"
+    fi
+}
+
+# Create virtual environment with cross-platform compatibility
+create_venv() {
+    local PYTHON_CMD=$(detect_python_cmd)
+    if [ $? -ne 0 ]; then
+        handle_error "Python command not found"
+        return 1
+    fi
+    
+    $PYTHON_CMD -m venv .venv
+    return $?
+}
+
+# Activate virtual environment with cross-platform compatibility
+activate_venv() {
+    if [ -f ".venv/bin/activate" ]; then
+        # Linux/macOS
+        source .venv/bin/activate
+    elif [ -f ".venv/Scripts/activate" ]; then
+        # Windows
+        source .venv/Scripts/activate
+    else
+        echo "Virtual environment not found"
+        return 1
+    fi
+}
+
+# Locate and run Arjun robustly (binary or python module) - Cross-platform
 run_arjun_cmd() {
     # Usage: run_arjun_cmd <args...>
+    
+    # Detect the appropriate Python command
+    PYTHON_CMD=$(detect_python_cmd)
+    if [ $? -ne 0 ]; then
+        handle_error_with_solution "Python command" "Python is not installed or not in PATH. Please install Python and add it to your PATH."
+        return 1
+    fi
 
     # 1) Prefer Python module within current Python (works in venvs)
-    if command -v python3 >/dev/null 2>&1; then
-        if python3 - <<'PY' >/dev/null 2>&1
+    if $PYTHON_CMD - <<'PY' >/dev/null 2>&1
 import importlib
 import sys
 sys.exit(0 if importlib.util.find_spec('arjun') else 1)
 PY
-        then
-            python3 -m arjun "$@" && return 0
-        else
-            # If in a venv, try auto-installing into it (Kali/PEP668 safe)
-            if [ -n "$VIRTUAL_ENV" ]; then
-                python3 -m pip install --quiet arjun >/dev/null 2>&1 || true
-                python3 -m arjun "$@" && return 0
-            fi
+    then
+        $PYTHON_CMD -m arjun "$@" && return 0
+    else
+        # If in a venv, try auto-installing into it (Kali/PEP668 safe)
+        if [ -n "$VIRTUAL_ENV" ]; then
+            $PYTHON_CMD -m pip install --quiet arjun >/dev/null 2>&1 || true
+            $PYTHON_CMD -m arjun "$@" && return 0
         fi
     fi
 
     # 2) Try pipx via module invocation first (avoids broken shell shim)
-    if command -v python3 >/dev/null 2>&1 && python3 -c "import pipx" >/dev/null 2>&1; then
-        python3 -m pipx run arjun "$@" && return 0
+    if $PYTHON_CMD -c "import pipx" >/dev/null 2>&1; then
+        $PYTHON_CMD -m pipx run arjun "$@" && return 0
     fi
     # If pipx module not importable, try shell command only if actually runnable
     if command -v pipx >/dev/null 2>&1; then
@@ -179,7 +244,7 @@ PY
         fi
     fi
 
-    handle_error_with_solution "Arjun command" "Recommended on Kali/PEP668 systems: 'python3 -m venv .venv && source .venv/bin/activate && python3 -m pip install arjun' or 'python3 -m pipx install arjun' (avoids broken /usr/local/bin/pipx shims) then re-run. If using apt, first fix dpkg: 'sudo dpkg --configure -a' then 'sudo apt install arjun'. If a stale '/usr/local/bin/arjun' exists with a bad interpreter, remove it: 'sudo rm -f /usr/local/bin/arjun'."
+    handle_error_with_solution "Arjun command" "Recommended on Kali/PEP668 systems: '$PYTHON_CMD -m venv .venv && source .venv/bin/activate && $PYTHON_CMD -m pip install arjun' or '$PYTHON_CMD -m pipx install arjun' (avoids broken /usr/local/bin/pipx shims) then re-run. If using apt, first fix dpkg: 'sudo dpkg --configure -a' then 'sudo apt install arjun'. If a stale '/usr/local/bin/arjun' exists with a bad interpreter, remove it: 'sudo rm -f /usr/local/bin/arjun'."
     return 1
 }
 
@@ -2572,8 +2637,8 @@ echo -e "${BOLD_BLUE}Appended URLs saved and combined into ${domain_name}-query.
 
 # Step 3: Checking page reflection on the URLs
 if [ -f "reflection.py" ]; then
-    echo -e "${BOLD_WHITE}Checking page reflection on the URLs with command: python3 reflection.py ${domain_name}-query.txt --threads 2${NC}"
-    sudo python3 reflection.py "${domain_name}-query.txt" --threads 2 || handle_error "reflection.py execution"
+    echo -e "${BOLD_WHITE}Checking page reflection on the URLs with command: $(detect_python_cmd) reflection.py ${domain_name}-query.txt --threads 2${NC}"
+    run_python_script reflection.py "${domain_name}-query.txt" --threads 2 || handle_error "reflection.py execution"
     sleep 5
 
     # Check if xss.txt is created after reflection.py
@@ -2778,7 +2843,7 @@ run_path_based_xss() {
 
     # Step 9: Running Python script for reflection checks
     show_progress "Running Python script for reflection checks on filtered URLs..."
-    sudo python3 path-reflection.py path-ready.txt --threads 2
+    run_python_script path-reflection.py path-ready.txt --threads 2
 
     # Step 9.1: Checking if the new file is generated
     if [ -f path-xss-urls.txt ]; then
@@ -3032,7 +3097,7 @@ run_advanced_xss_pipeline_option() {
         echo -e "${BOLD_BLUE}Running reflection check on pipeline results...${NC}"
         if [ -f "reflection.py" ]; then
             echo -e "${BOLD_BLUE}Running reflection.py on $output_file...${NC}"
-            sudo python3 reflection.py "$output_file" --threads 3
+            run_python_script reflection.py "$output_file" --threads 3
             echo -e "${BOLD_GREEN}Reflection check completed!${NC}"
             
             # Check if xss.txt was created and combine with pipeline results
