@@ -140,10 +140,10 @@ Launch Ubuntu from Start Menu and create your Linux user.
 
 2) Access your Windows files from WSL:
 
-- Windows drives are mounted under `/mnt`. Example: `H:\xssorRecon` → `/mnt/h/xssorRecon`
+- Windows drives are mounted under `/mnt`. Example: `H:\FagunXssRecon` → `/mnt/h/FagunXssRecon`
 
 ```bash
-cd /mnt/h/xssorRecon
+cd /mnt/h/FagunXssRecon
 ```
 
 3) Fix line endings and permissions (first run only):
@@ -160,13 +160,13 @@ chmod +x FagunXssRecon.sh
 bash ./FagunXssRecon.sh
 
 # Option B: copy to Linux home and run
-mkdir -p ~/xssorRecon && cp -f /mnt/h/xssorRecon/FagunXssRecon.sh ~/xssorRecon/
-cd ~/xssorRecon
+mkdir -p ~/FagunXssRecon && cp -f /mnt/h/FagunXssRecon/FagunXssRecon.sh ~/FagunXssRecon/
+cd ~/FagunXssRecon
 chmod +x FagunXssRecon.sh
 bash ./FagunXssRecon.sh
 ```
 
-Tip: You can run from `~/xssorRecon` and read/write inputs/outputs under `/mnt/h/...` paths.
+Tip: You can run from `~/FagunXssRecon` and read/write inputs/outputs under `/mnt/h/...` paths.
 
 ## Prerequisites
 
