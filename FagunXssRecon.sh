@@ -1,6 +1,11 @@
 #!/bin/bash
 
 # Function to Install prerequired files
+# Load Chaos API key from local file if not already set
+if [ -z "${PDCP_API_KEY:-}" ] && [ -f ".pdcp_api_key" ]; then
+    PDCP_API_KEY="$(tr -d '\r\n' < .pdcp_api_key)"
+    export PDCP_API_KEY
+fi
 # Check if python3-venv is installed
 if ! dpkg -l | grep -q python3-venv; then
     echo "python3-venv not found. Installing..."
@@ -39,6 +44,46 @@ handle_error() {
 # Function to show progress with emoji
 show_progress() {
     echo -e "${BOLD_BLUE}Current process: $1...⌛️${NC}"
+}
+
+# Simple retry wrapper for flaky network tools (up to 2 attempts)
+run_with_retry() {
+    # Usage: run_with_retry <command-as-string>
+    local cmd="$1"
+    bash -c "$cmd"
+    local ec=$?
+    # If interrupted (Ctrl-C), propagate immediately and do not retry
+    if [ $ec -eq 130 ]; then
+        return 130
+    fi
+    [ $ec -eq 0 ] && return 0
+    echo -e "${YELLOW}Retrying: $cmd${NC}" && sleep 2
+    bash -c "$cmd"
+}
+
+# Return line count for a file (or 0 if missing/empty)
+file_count() {
+    local f="$1"
+    [ -f "$f" ] && [ -s "$f" ] && wc -l < "$f" || echo 0
+}
+
+# Locate ProjectDiscovery httpx binary, avoid conflict with Python 'httpx'
+find_pd_httpx() {
+    local candidates=()
+    # Candidate paths in order of preference
+    [ -x "$HOME/go/bin/httpx" ] && candidates+=("$HOME/go/bin/httpx")
+    [ -x "/usr/local/bin/httpx" ] && candidates+=("/usr/local/bin/httpx")
+    if command -v httpx >/dev/null 2>&1; then
+        candidates+=("$(command -v httpx)")
+    fi
+
+    for bin in "${candidates[@]}"; do
+        if "$bin" -h 2>&1 | grep -qi "projectdiscovery"; then
+            echo "$bin"
+            return 0
+        fi
+    done
+    echo ""
 }
 
 # Performance tuning knobs (override via env):
@@ -156,6 +201,11 @@ run_gau() {
     local domains_file="$1"; local output_file="$2"
     [ -z "$domains_file" ] || [ -z "$output_file" ] && return 1
     if command -v gau >/dev/null 2>&1; then
+        # Clean up any existing config files that might cause permission issues
+        rm -f /root/.gau.toml 2>/dev/null || true
+        rm -f "$HOME/.gau.toml" 2>/dev/null || true
+        
+        # Run gau with error suppression for config warnings
         gau --subs --providers wayback,otx,urlscan,commoncrawl -o "$output_file" -sf "$domains_file" 2>/dev/null || return 1
         return 0
     fi
@@ -185,142 +235,160 @@ run_httpx_alive() {
     return 1
 }
 
+# Advanced XSS Pipeline Functions
+run_gf_xss() {
+    # Usage: run_gf_xss <input_file> <output_file>
+    local input_file="$1"; local output_file="$2"
+    [ -z "$input_file" ] || [ -z "$output_file" ] && return 1
+    if command -v gf >/dev/null 2>&1; then
+        gf xss < "$input_file" > "$output_file" 2>/dev/null || return 1
+        return 0
+    fi
+    return 1
+}
+
+run_uro() {
+    # Usage: run_uro <input_file> <output_file>
+    local input_file="$1"; local output_file="$2"
+    [ -z "$input_file" ] || [ -z "$output_file" ] && return 1
+    if command -v uro >/dev/null 2>&1; then
+        uro < "$input_file" > "$output_file" 2>/dev/null || return 1
+        return 0
+    fi
+    return 1
+}
+
+run_gxss() {
+    # Usage: run_gxss <input_file> <output_file>
+    local input_file="$1"; local output_file="$2"
+    [ -z "$input_file" ] || [ -z "$output_file" ] && return 1
+    if command -v Gxss >/dev/null 2>&1; then
+        Gxss -l "$input_file" -o "$output_file" 2>/dev/null || return 1
+        return 0
+    fi
+    return 1
+}
+
+run_kxss() {
+    # Usage: run_kxss <input_file> <output_file>
+    local input_file="$1"; local output_file="$2"
+    [ -z "$input_file" ] || [ -z "$output_file" ] && return 1
+    if command -v kxss >/dev/null 2>&1; then
+        kxss < "$input_file" > "$output_file" 2>/dev/null || return 1
+        return 0
+    fi
+    return 1
+}
+
+run_advanced_xss_pipeline() {
+    # Usage: run_advanced_xss_pipeline <input_file> <output_file>
+    local input_file="$1"; local output_file="$2"
+    [ -z "$input_file" ] || [ -z "$output_file" ] && return 1
+    
+    local temp_dir="/tmp/fagun_xss_$$"
+    mkdir -p "$temp_dir"
+    
+    local step1="$temp_dir/gf_xss.txt"
+    local step2="$temp_dir/uro.txt"
+    local step3="$temp_dir/gxss.txt"
+    local step4="$temp_dir/kxss.txt"
+    local xss_output="$temp_dir/xss_output.txt"
+    
+    echo -e "${YELLOW}[!] Starting Advanced XSS Pipeline...${NC}"
+    
+    # Step 1: Filter with gf xss patterns
+    echo -e "${BLUE}[+] Step 1/5: Filtering URLs with gf xss patterns...${NC}"
+    if run_gf_xss "$input_file" "$step1"; then
+        echo -e "${GREEN}[✓] gf xss filtering completed${NC}"
+    else
+        echo -e "${RED}[!] gf xss not available, skipping...${NC}"
+        cp "$input_file" "$step1"
+    fi
+    
+    # Step 2: Remove duplicates with uro
+    echo -e "${BLUE}[+] Step 2/5: Removing duplicates with uro...${NC}"
+    if run_uro "$step1" "$step2"; then
+        echo -e "${GREEN}[✓] uro deduplication completed${NC}"
+    else
+        echo -e "${RED}[!] uro not available, using sort -u...${NC}"
+        sort -u "$step1" > "$step2"
+    fi
+    
+    # Step 3: Check for reflected parameters with Gxss
+    echo -e "${BLUE}[+] Step 3/5: Checking for reflected parameters with Gxss...${NC}"
+    if run_gxss "$step2" "$step3"; then
+        echo -e "${GREEN}[✓] Gxss reflection check completed${NC}"
+    else
+        echo -e "${RED}[!] Gxss not available, skipping...${NC}"
+        cp "$step2" "$step3"
+    fi
+    
+    # Step 4: Identify unfiltered special characters with kxss
+    echo -e "${BLUE}[+] Step 4/5: Identifying unfiltered characters with kxss...${NC}"
+    if run_kxss "$step3" "$step4"; then
+        echo -e "${GREEN}[✓] kxss character analysis completed${NC}"
+    else
+        echo -e "${RED}[!] kxss not available, skipping...${NC}"
+        cp "$step3" "$step4"
+    fi
+    
+    # Step 5: Combine with tee to save intermediate results
+    echo -e "${BLUE}[+] Step 5/5: Saving intermediate results with tee...${NC}"
+    cat "$step4" | tee "xss_output.txt"
+    
+    # Final cleanup and refinement using the exact command you provided
+    echo -e "${BLUE}[+] Refining and validating results...${NC}"
+    # Try multiple patterns to extract URLs from different tool outputs
+    cat "xss_output.txt" | grep -oP '^URL: \K\S+' 2>/dev/null | sed 's/=.*/=/' | sort -u > "$output_file" || \
+    cat "xss_output.txt" | grep -oP 'https?://[^\s]+' 2>/dev/null | sed 's/=.*/=/' | sort -u > "$output_file" || \
+    cat "xss_output.txt" | grep -v '^$' | sed 's/=.*/=/' | sort -u > "$output_file"
+    
+    # Cleanup temp files
+    rm -rf "$temp_dir"
+    
+    echo -e "${GREEN}[✓] Advanced XSS Pipeline completed! Results saved to: $output_file${NC}"
+    echo -e "${GREEN}[✓] Intermediate results saved to: xss_output.txt${NC}"
+    return 0
+}
+
 # Clear the terminal
 clear
 
 # Display banner
 echo -e "${BOLD_BLUE}"
-echo "███████╗ █████╗  ██████╗ ██╗   ██╗███╗   ██╗██╗  ██╗██╗  ██╗███████╗██╗  ██╗"
-echo "██╔════╝██╔══██╗██╔════╝ ██║   ██║████╗  ██║██║ ██╔╝██║ ██╔╝██╔════╝██║  ██║"
-echo "█████╗  ███████║██║  ███╗██║   ██║██╔██╗ ██║█████╔╝ █████╔╝ █████╗  ███████║"
-echo "██╔══╝  ██╔══██║██║   ██║██║   ██║██║╚██╗██║██╔═██╗ ██╔═██╗ ██╔══╝  ██╔══██║"
-echo "██║     ██║  ██║╚██████╔╝╚██████╔╝██║ ╚████║██║  ██╗██║  ██╗███████╗██║  ██║"
-echo "╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝"
-echo "                              FagunXssRecon v3"
+echo "███████╗ █████╗  ██████╗ ██╗   ██╗███╗   ██╗"
+echo "██╔════╝██╔══██╗██╔════╝ ██║   ██║████╗  ██║"
+echo "█████╗  ███████║██║  ███╗██║   ██║██╔██╗ ██║"
+echo "██╔══╝  ██╔══██║██║   ██║██║   ██║██║╚██╗██║"
+echo "██║     ██║  ██║╚██████╔╝╚██████╔╝██║ ╚████║"
+echo "╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝"
+echo "                              FagunXssRecon"
 echo -e "${NC}"
 
 # Centered Contact Information
-echo -e "${BOLD_BLUE}                      Website: store.fagun.com${NC}"
-echo -e "${BOLD_BLUE}                      Free BlindXSS Testing: fagun.com${NC}"
-echo -e "${BOLD_BLUE}                      X: x.com/fagun${NC}"
+echo -e "${BOLD_BLUE}                      Built By Mejbaur Bahar Fagun${NC}"
+echo -e "${BOLD_BLUE}                      Software Engineer in Test${NC}"
+echo -e "${BOLD_BLUE}                      LinkedIn: https://www.linkedin.com/in/mejbaur/${NC}"
 
 # Function to display options
 display_options() {
-    echo -e "${BOLD_BLUE}Please select an option:${NC}"
-    echo -e "${RED}1: Install all tools${NC}"
-    echo -e "${RED}2: Enter a domain name of the target${NC}"
-    echo -e "${YELLOW}3: Domain Enumeration and Filtering${NC}"
-    echo -e "${YELLOW}4: URL Crawling and Filtering${NC}"
-    echo -e "${YELLOW}5: In-depth URL Filtering${NC}"
-    echo -e "${YELLOW}6: HiddenParamFinder${NC}"
-    echo -e "${YELLOW}7: Preparing for XSS Detection and Query String URL Analysis${NC}"
-    echo -e "${YELLOW}8: Launching fagun Tool${NC}"
-    echo -e "${YELLOW}9: Exit${NC}"
-    echo -e "${YELLOW}10: Guide to Deploying fagun on VPS Servers${NC}"
-    echo -e "${YELLOW}11: Path-based XSS${NC}"
-    echo -e "${YELLOW}12: Domains Search Inputs${NC}"
+    echo -e "${BOLD_BLUE}✨ Please select an option:${NC}"
+    echo -e "${RED}1: 🛠️  Install all tools${NC}"
+    echo -e "${RED}2: 🎯  Enter target domain${NC}"
+    echo -e "${YELLOW}3: 🧭  Domain Enumeration & Filtering${NC}"
+    echo -e "${YELLOW}4: 🌐  URL Crawling & Filtering${NC}"
+    echo -e "${YELLOW}5: 🧹  In-depth URL Filtering${NC}"
+    echo -e "${YELLOW}6: 🔎  Hidden Parameter Finder${NC}"
+    echo -e "${YELLOW}7: 🧪  Prepare for XSS (query URLs)${NC}"
+    echo -e "${YELLOW}8: 🔥  Advanced XSS Pipeline (gau|gf|uro|Gxss|kxss)${NC}"
+    echo -e "${YELLOW}9: ❌  Exit${NC}"
+    echo -e "${YELLOW}10: 🧪  Path-based XSS${NC}"
 }
 
 
 # Function to display Guide to Deploying fagun on VPS Servers information with better formatting and crystal-like color
 show_vps_info() {
-    echo -e "${CYAN}To run fagun continuously on bug bounty programs and keep it running in the background, a VPS server is highly recommended.${NC}"
-    echo -e "${CYAN}I personally recommend Contabo, which I've been using for the past three years. It has performed reliably without any restrictions.${NC}"
-    echo -e "${CYAN}Additionally, the pricing is very competitive.${NC}\n"
-    
-    echo -e "${CYAN}Here is the link to purchase the Contabo VPS 2 server Debian OS:${NC}"
-    echo -e "${CYAN}Make sure to select under OS settings to be DEBIAN OS 12:${NC}"
-    echo -e "${CYAN}https://contabo.com/en/vps/cloud-vps-2/?image=debian.329&qty=1&contract=1&storage-type=vps2-400-gb-sdd${NC}\n"
-    echo -e "${CYAN}You can select any plan from Contabo Hosting https://contabo.com/en/vps/${NC}\n"
-    
-    echo -e "${CYAN}After completing the purchase, you can expect to receive your credentials via email within 15 minutes to 3 hours.${NC}\n"
-    
-    echo -e "${CYAN}Next, update your VPS and install tmux to allow fagun to run in the background.${NC}\n"
-    
-    echo -e "${CYAN}Below are the essential tmux commands:${NC}\n"
-    
-    echo -e "${CYAN}#### Start a new tmux session:${NC}"
-    echo -e "${CYAN}apt install tmux                          # Install tmux${NC}"
-    echo -e "${CYAN}tmux new-session -s fagun                 # Create a new tmux session${NC}"
-    echo -e "${CYAN}tmux attach-session -t fagun              # Reattach to an existing tmux session from another terminal tab${NC}"
-    echo -e "${CYAN}tmux detach -s fagun                      # Detach from the tmux session${NC}"
-    echo -e "${CYAN}tmux kill-session -t fagun                # Terminate the fagun tmux session${NC}"
-    echo -e "${CYAN}tmux kill-server                          # Terminate all tmux sessions${NC}"
-    echo -e "${CYAN}tmux ls                                   # List all active tmux sessions${NC}\n"
-    
-echo -e "${CYAN}#### Install and Configure Cockpit https://YourVpsIP:9090${NC}"
-echo -e "${CYAN}#### Cockpit it WEB GUI for SSH with many features like Navigator (File Manmager) for quick upload/download files:${NC}"
-echo -e "${CYAN}sudo apt install cockpit cockpit-podman -y  # Install Cockpit and Podman support${NC}"
-echo -e "${CYAN}sudo systemctl start cockpit               # Start Cockpit service${NC}"
-echo -e "${CYAN}sudo systemctl enable cockpit              # Enable Cockpit to start on boot${NC}"
-echo -e "${CYAN}sudo apt install ufw -y                    # Install UFW firewall${NC}"
-echo -e "${CYAN}sudo ufw enable                            # Enable UFW firewall${NC}"
-echo -e "${CYAN}sudo ufw allow 9090                        # Allow Cockpit access on port 9090${NC}"
-echo -e "${CYAN}sudo ufw allow 80                          # Allow HTTP access${NC}"
-echo -e "${CYAN}sudo ufw allow 22                          # Allow SSH access${NC}"
-echo -e "${CYAN}sudo ufw allow 3389                        # Allow RDP access${NC}"
-echo -e "${CYAN}sudo ufw reload                            # Reload UFW rules${NC}\n"
-echo -e "${CYAN}sudo ufw allow 22/tcp                      # Allow ssh over tcp${NC}\n"
-echo -e "${CYAN}sudo ufw allow ssh                         # Allow ssh
-echo -e "${CYAN}Configure Cockpit to Allow                 # Unencrypted Access and Root Login:${NC}"
-echo -e "${CYAN}sudo nano /etc/cockpit/cockpit.conf        # Add settings to cockpit.conf${NC}"
-echo -e "${CYAN}[WebService]\nAllowUnencrypted = true\nLogin= root\n" # Configuration content for cockpit.conf
-echo -e "${CYAN}sudo systemctl restart cockpit             # Restart Cockpit service to apply changes${NC}"
-echo -e "${CYAN}sudo apt-get upgrade cockpit               # Upgrade Cockpit${NC}"
-echo -e "${CYAN}sudo nano /etc/cockpit/disallowed-users    # Delete 'root' user from disallowed-users${NC}"
-echo -e "${CYAN}sudo nano /etc/pam.d/cockpit               # Comment pam_listfile.so item=user sense=deny line${NC}"
-echo -e "${CYAN}sudo mkdir -p /etc/cockpit/ws-certs.d      # Create directory for certificates${NC}"
-echo -e "${CYAN}sudo rm /etc/cockpit/ws-certs.d/0-self-signed.cert # Remove self-signed cert${NC}"
-echo -e "${CYAN}sudo systemctl restart cockpit             # Restart Cockpit service${NC}\n"
-
-echo -e "${CYAN}#### Install Cockpit Navigator Plugin & ZIP archive:${NC}"
-echo -e "${CYAN}sudo apt-get install rsync zip  # Install rsync zip${NC}"
-echo -e "${CYAN}sudo apt-get install unzip  # Install unzip ${NC}"
-echo -e "${CYAN}sudo apt-get install p7zip-full  # Install p7zip${NC}"
-echo -e "${CYAN}wget https://github.com/45Drives/cockpit-navigator/releases/download/v0.5.10/cockpit-navigator_0.5.10-1focal_all.deb  # Download Cockpit Navigator${NC}"
-echo -e "${CYAN}sudo dpkg -i cockpit-navigator_0.5.10-1focal_all.deb  # Install Cockpit Navigator${NC}"
-echo -e "${CYAN}Navigate to https://YourVpsIP:9090/navigator  # Access Cockpit Navigator in your browser${NC}\n"
-
-echo -e "${CYAN}#### Install Kali Linux and Desktop Environment:${NC}"
-echo -e "${CYAN}sudo nano /etc/apt/sources.list             # Add Kali repository to sources.list${NC}"
-echo -e "${CYAN}deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\n"
-echo -e "${CYAN}wget -q -O - https://archive.kali.org/archive-key.asc | gpg --dearmor > /etc/apt/trusted.gpg.d/kali-archive-keyring.gpg # Import Kali keyring${NC}"
-echo -e "${CYAN}sudo apt update                             # Update package list${NC}"
-echo -e "${CYAN}sudo apt upgrade                            # Upgrade packages${NC}"
-echo -e "${CYAN}sudo apt full-upgrade                       # Full system upgrade${NC}"
-echo -e "${CYAN}sudo apt dist-upgrade                       # Distribution upgrade${NC}"
-echo -e "${CYAN}sudo apt -y install kali-linux-everything   # Install all Kali tools${NC}"
-echo -e "${CYAN}sudo apt install kali-desktop-gnome         # Install Kali GNOME Desktop${NC}"
-echo -e "${CYAN}sudo apt install kali-linux-default         # Install default Kali packages${NC}"
-echo -e "${CYAN}sudo apt update --fix-missing               # Fix missing dependencies${NC}"
-echo -e "${CYAN}sudo apt --fix-broken install               # Fix broken installations${NC}"
-echo -e "${CYAN}sudo dpkg --configure -a                    # Reconfigure dpkg${NC}"
-echo -e "${CYAN}sudo update-alternatives --config x-session-manager  # Configure session manager${NC}"
-echo -e "${CYAN}sudo apt -y install kali-root-login         # Enable root login${NC}"
-echo -e "${CYAN}sudo passwd                                 # Set root password${NC}"
-echo -e "${CYAN}sudo apt autoremove                         # Remove unnecessary packages${NC}"
-echo -e "${CYAN}sudo apt clean                              # Clean up package cache${NC}\n"
-echo -e "${CYAN}sudo reboot                                 # Update changes to VPS server${NC}\n"
-
-
-# Steps for installing fagun on VPS
-echo -e "${CYAN}#### Steps for installing fagun on VPS:${NC}"
-
-echo -e "${CYAN}1. Install Cockpit                         ${NC} # Install Cockpit for VPS management"
-echo -e "${CYAN}2. Install Debian                          ${NC} # Install the Debian OS"
-echo -e "${CYAN}3. nano /etc/apt/sources.list              ${NC} # Edit source list in Debian OS"
-echo -e "${CYAN}4. deb http://asi-fs-d.contabo.net/debian bookworm main non-free-firmware  ${NC} # Change 'bookworm' to 'testing'"
-echo -e "${CYAN}5. deb-src http://asi-fs-d.contabo.net/debian bookworm main non-free-firmware ${NC} # Change 'bookworm' to 'testing'"
-echo -e "${CYAN}6. Update & Upgrade                        ${NC} # sudo apt update && sudo apt install libc6 -y && sudo apt install gnome -y"
-echo -e "${CYAN}7. Install Kali OS                         ${NC} # Not needed any changes except updates & upgrades"
-echo -e "${CYAN}8. Upload all files to your VPS            ${NC} # Upload fagun + fagunRecon files"
-echo -e "${CYAN}9. chmod +x fagun                          ${NC} # Add execute permission to the fagun tool"
-echo -e "${CYAN}10. Install required Chrome version from the eBook ${NC} # Install the required Chrome version as outlined in the eBook"
-echo -e "${CYAN}11. Run fagun and enter API License         ${NC} # Run fagun tool and enter your API license"
-echo -e "${CYAN}12. Run fagunRecon and install all tools   ${NC} # Run fagunRecon and install necessary tools"
-echo -e "${CYAN}13. Ensure all files in the same folder    ${NC} # Make sure all files are inside the same folder"
-echo -e "${CYAN}14. Run fagun tool                         ${NC} # Launch and run fagun tool"
-
+    echo -e "${CYAN}This function has been removed as requested.${NC}"
 }
 
 # Initialize a variable for the domain name
@@ -520,6 +588,94 @@ fi
 
     # Display installed tools
     echo -e "${BOLD_BLUE}All tools have been successfully installed within the virtual environment.${NC}"
+
+    # --- Ensure discovery and pipeline tools are installed (Option 1) ---
+    show_progress "Installing discovery and pipeline tools (one-time)"
+
+    # Base deps
+    sudo apt-get update -y || true
+    sudo apt-get install -y curl unzip git || true
+
+    # Go toolchain for many security tools
+    if ! command -v go >/dev/null 2>&1; then
+        sudo apt-get install -y golang-go || true
+    fi
+    export PATH=$PATH:$(go env GOPATH)/bin
+
+    # Install subfinder
+    if ! command -v subfinder >/dev/null 2>&1; then
+        go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest || true
+    fi
+
+    # Install assetfinder
+    if ! command -v assetfinder >/dev/null 2>&1; then
+        go install github.com/tomnomnom/assetfinder@latest || true
+    fi
+
+    # Install amass & findomain via apt when available
+    if ! command -v amass >/dev/null 2>&1; then
+        sudo apt-get install -y amass || true
+    fi
+    if ! command -v findomain >/dev/null 2>&1; then
+        sudo apt-get install -y findomain || true
+    fi
+
+    # Install chaos client
+    if ! command -v chaos >/dev/null 2>&1; then
+        go install github.com/projectdiscovery/chaos-client/cmd/chaos@latest || true
+    fi
+
+    # Install waybackurls
+    if ! command -v waybackurls >/dev/null 2>&1; then
+        go install github.com/tomnomnom/waybackurls@latest || true
+    fi
+
+    # Install httpx
+    if ! command -v httpx >/dev/null 2>&1; then
+        go install github.com/projectdiscovery/httpx/cmd/httpx@latest || true
+    fi
+
+    # Install katana
+    if ! command -v katana >/dev/null 2>&1; then
+        go install github.com/projectdiscovery/katana/cmd/katana@latest || true
+    fi
+
+    # Install gau
+    if ! command -v gau >/dev/null 2>&1; then
+        go install github.com/lc/gau/v2/cmd/gau@latest || true
+    fi
+
+    # Install gf and default patterns
+    if ! command -v gf >/dev/null 2>&1; then
+        go install github.com/tomnomnom/gf@latest || true
+        mkdir -p ~/.gf
+        git clone https://github.com/1ndianl33t/Gf-Patterns ~/.gf 2>/dev/null || true
+        git clone https://github.com/tomnomnom/gf ~/.gf-tmp 2>/dev/null || true
+        cp -n ~/.gf-tmp/examples/* ~/.gf/ 2>/dev/null || true
+        rm -rf ~/.gf-tmp || true
+    fi
+
+    # Install kxss
+    if ! command -v kxss >/dev/null 2>&1; then
+        go install github.com/Emoe/kxss@latest || true
+    fi
+
+    # Install Gxss
+    if ! command -v Gxss >/dev/null 2>&1; then
+        go install github.com/KathanP19/Gxss@latest || true
+    fi
+
+    # Re-export PATH for this session
+    export PATH=$PATH:$(go env GOPATH)/bin
+
+    # Summarize installs (non-fatal)
+    for t in subfinder assetfinder amass findomain chaos waybackurls httpx katana gau gf kxss Gxss; do
+        if command -v "$t" >/dev/null 2>&1; then
+            echo -e "${BOLD_BLUE}Installed: $t -> $(command -v $t)${NC}"
+        else
+            echo -e "${YELLOW}Skipped or failed: $t (you can install later)${NC}"
+        fi
+    done
 
 
     # Sleep for 3 seconds
@@ -1141,6 +1297,50 @@ sleep 3
     dnsbruter -up
     sleep 3
 
+    # Step 15: Install additional domain discovery tools
+    show_progress "Installing additional domain discovery tools"
+    
+    # Install subfinder
+    go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+    
+    # Install assetfinder
+    go install github.com/tomnomnom/assetfinder@latest
+    
+    # Install amass
+    go install -v github.com/owasp-amass/amass/v4/...@master
+    
+    # Install findomain
+    wget -O findomain.zip https://github.com/Findomain/Findomain/releases/latest/download/findomain-linux.zip
+    unzip findomain.zip
+    chmod +x findomain
+    sudo mv findomain /usr/local/bin/
+    rm findomain.zip
+    
+    # Install chaos
+    go install -v github.com/projectdiscovery/chaos-client/cmd/chaos@latest
+    
+    sleep 3
+
+    # Step 16: Install additional URL discovery tools
+    show_progress "Installing additional URL discovery tools"
+    
+    # Install httpx
+    go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
+    
+    # Install httprobe
+    go install github.com/tomnomnom/httprobe@latest
+    
+    # Install meg
+    go install github.com/tomnomnom/meg@latest
+    
+    # Install paramspider
+    pip install paramspider --break-system-packages --root-user-action=ignore
+    
+    # Install waybackpy
+    pip install waybackpy --break-system-packages --root-user-action=ignore
+    
+    sleep 3
+
     # Set specific permissions for installed tools
     sudo chmod 755 /usr/local/bin/waybackurls
     sudo chmod 755 /usr/local/bin/katana
@@ -1218,6 +1418,36 @@ urlfinder -h > /dev/null 2>&1 && echo "URLFinder is installed" || echo "URLFinde
 
 echo -e "${BOLD_WHITE}11. Tmux:${NC}"
 echo "Tmux is installed (skipping check)"
+
+echo -e "${BOLD_WHITE}12. Subfinder:${NC}"
+subfinder -h > /dev/null 2>&1 && echo "Subfinder is installed" || echo "Subfinder is not installed correctly"
+
+echo -e "${BOLD_WHITE}13. Assetfinder:${NC}"
+assetfinder -h > /dev/null 2>&1 && echo "Assetfinder is installed" || echo "Assetfinder is not installed correctly"
+
+echo -e "${BOLD_WHITE}14. Amass:${NC}"
+amass -h > /dev/null 2>&1 && echo "Amass is installed" || echo "Amass is not installed correctly"
+
+echo -e "${BOLD_WHITE}15. Findomain:${NC}"
+findomain -h > /dev/null 2>&1 && echo "Findomain is installed" || echo "Findomain is not installed correctly"
+
+echo -e "${BOLD_WHITE}16. Chaos:${NC}"
+chaos -h > /dev/null 2>&1 && echo "Chaos is installed" || echo "Chaos is not installed correctly"
+
+echo -e "${BOLD_WHITE}17. Httpx:${NC}"
+httpx -h > /dev/null 2>&1 && echo "Httpx is installed" || echo "Httpx is not installed correctly"
+
+echo -e "${BOLD_WHITE}18. Httprobe:${NC}"
+httprobe -h > /dev/null 2>&1 && echo "Httprobe is installed" || echo "Httprobe is not installed correctly"
+
+echo -e "${BOLD_WHITE}19. Meg:${NC}"
+meg -h > /dev/null 2>&1 && echo "Meg is installed" || echo "Meg is not installed correctly"
+
+echo -e "${BOLD_WHITE}20. Paramspider:${NC}"
+paramspider -h > /dev/null 2>&1 && echo "Paramspider is installed" || echo "Paramspider is not installed correctly"
+
+echo -e "${BOLD_WHITE}21. Waybackpy:${NC}"
+waybackpy -h > /dev/null 2>&1 && echo "Waybackpy is installed" || echo "Waybackpy is not installed correctly"
 
 # Cyan and White message with tool links for manual installation
 echo -e "\n${BOLD_CYAN}If you encounter any issues or are unable to run any of the tools,${NC}"
@@ -1309,8 +1539,15 @@ run_step_3() {
     fi
 
     echo -e "${BOLD_WHITE}You selected: Domain Enumeration and Filtering for $domain_name${NC}"
-    echo -e "${BOLD_WHITE}Do you want to use your own list of domains or fagunRecon to find it for you? Enter Y for your list or N for fagunRecon list - domain list must be in format ${domain_name}-domains.txt: ${NC}"
-    read user_choice
+    echo -e "${BOLD_BLUE}📋 Domain Discovery Options:${NC}"
+    echo -e "${YELLOW}• Option Y: Use your own domain list${NC}"
+    echo -e "${YELLOW}• Option N: Let FagunXssRecon discover domains automatically${NC}"
+    echo ""
+    echo -e "${BOLD_WHITE}Please choose:${NC}"
+    echo -e "${GREEN}Y${NC} = Use your own domain list (file must be named: ${domain_name}-domains.txt)"
+    echo -e "${GREEN}N${NC} = Auto-discover domains using FagunXssRecon tools"
+    echo ""
+    read -p "$(echo -e "${BOLD_WHITE}Enter your choice (Y/N): ${NC}")" user_choice
 
     # Convert user input to uppercase
     user_choice=$(echo "$user_choice" | tr '[:lower:]' '[:upper:]')
@@ -1319,7 +1556,7 @@ run_step_3() {
         if [ -f "${domain_name}-domains.txt" ]; then
             echo -e "${BOLD_WHITE}Using your provided list of domains from ${domain_name}-domains.txt${NC}"
             # Skip directly to the Y/N prompt for continuing the scan
-            read -p "$(echo -e "${BOLD_WHITE}Your domain file has been created. Would you like to continue scanning your target domain, including all its subdomains? If so, please enter 'Y'. If you prefer to modify the domain file first, so you can delete these and add your domains, enter 'N', and you can manually proceed with step 4 afterwards. Do you want to continue scanning with all subdomains (Y/N)?: ${NC}")" continue_scan
+            read -p "$(echo -e "${BOLD_WHITE}✅ Domain file ready! What would you like to do next?${NC}\n${BOLD_BLUE}Y${NC} = Continue scanning with all subdomains\n${BOLD_BLUE}N${NC} = Edit the domain file first, then manually proceed to step 4\n\n${BOLD_WHITE}Enter your choice (Y/N): ${NC}")" continue_scan
             if [[ "$continue_scan" =~ ^[Yy]$ ]]; then
                 # Step xx: Filtering ALIVE DOMAINS
                 show_progress "Filtering ALIVE DOMAINS"
@@ -1367,46 +1604,150 @@ run_step_3() {
             exit 1
         fi
     elif [[ "$user_choice" == "N" ]]; then
-        # Step 1: Passive FUZZ domains with wordlist
-        show_progress "Passive FUZZ domains with wordlist"
+        # Step 1: Passive domain discovery with subfinder
+        show_progress "Passive domain discovery with subfinder"
         python3 -m venv .venv
         source .venv/bin/activate 
-        dnsbruter -d "$domain_name" -w subs-dnsbruter-small.txt -c 150 -wt 80 -rt 500 -wd -ws wild.txt -o output-dnsbruter.txt || handle_error "dnsbruter"
-        sleep 5
+        if command -v subfinder >/dev/null 2>&1; then
+            # Use timeout in seconds for broader version compatibility
+            run_with_retry "subfinder -d \"$domain_name\" -all -recursive -timeout 300 -silent -o output-subfinder.txt" || echo -e "${YELLOW}subfinder failed, continuing...${NC}"
+        else
+            echo -e "${YELLOW}subfinder not found, skipping.${NC}"
+        fi
+        sleep 3
 
-        # Step 2: Active brute crawling domains
-        show_progress "Active brute crawling domains"
-        python3 -m venv .venv
-        source .venv/bin/activate 
-        subdominator -d "$domain_name" -o output-subdominator.txt || handle_error "subdominator"
-        sleep 5
+        # Step 2: Passive domain discovery with assetfinder
+        show_progress "Passive domain discovery with assetfinder"
+        if command -v assetfinder >/dev/null 2>&1; then
+            run_with_retry "assetfinder --subs-only \"$domain_name\" > output-assetfinder.txt" || echo -e "${YELLOW}assetfinder failed, continuing...${NC}"
+        else
+            echo -e "${YELLOW}assetfinder not found, skipping.${NC}"
+        fi
+        sleep 3
 
-        # Step 3: Checking if output-dnsbruter.txt was created
-        if [ ! -f "output-dnsbruter.txt" ]; then
-            echo "Error: output-dnsbruter.txt not found. The dnsbruter command may have failed."
-            if [ -f "output-subdominator.txt" ]; then
-                echo "Moving output-subdominator.txt to ${domain_name}-domains.txt"
-                mv output-subdominator.txt "${domain_name}-domains.txt"
+        # Step 3: Passive domain discovery with amass
+        show_progress "Passive domain discovery with amass"
+        if command -v amass >/dev/null 2>&1; then
+            run_with_retry "amass enum -passive -d \"$domain_name\" -o output-amass.txt" || echo -e "${YELLOW}amass failed, continuing...${NC}"
+        else
+            echo -e "${YELLOW}amass not found, skipping.${NC}"
+        fi
+        sleep 3
+
+        # Step 4: Passive domain discovery with findomain
+        show_progress "Passive domain discovery with findomain"
+        if command -v findomain >/dev/null 2>&1; then
+            run_with_retry "findomain -t \"$domain_name\" -q -o" || echo -e "${YELLOW}findomain failed, continuing...${NC}"
+            [ -f "${domain_name}.txt" ] && mv "${domain_name}.txt" output-findomain.txt || echo "findomain output not found"
+        else
+            echo -e "${YELLOW}findomain not found, skipping.${NC}"
+        fi
+        sleep 3
+
+        # Step 5: Passive domain discovery with chaos
+        show_progress "Passive domain discovery with chaos"
+        if command -v chaos >/dev/null 2>&1; then
+            if [ -z "${PDCP_API_KEY:-}" ]; then
+                echo -e "${YELLOW}Chaos API key (PDCP_API_KEY) not set, skipping chaos.${NC}"
             else
-                echo "Error: output-subdominator.txt not found. The subdominator command may have also failed."
-                exit 1
+                run_with_retry "chaos -d \"$domain_name\" -silent -o output-chaos.txt" || echo -e "${YELLOW}chaos failed, continuing...${NC}"
             fi
         else
-            if [ -f "output-subdominator.txt" ]; then
-                show_progress "Merging passive and active results into one file"
-                cat output-dnsbruter.txt output-subdominator.txt > "${domain_name}-domains.txt" || handle_error "Merging domains"
+            echo -e "${YELLOW}chaos not found, skipping.${NC}"
+        fi
+        sleep 3
+
+        # Step 6: Passive FUZZ domains with wordlist (prompt for small/medium)
+        show_progress "Passive FUZZ domains with wordlist"
+        if command -v dnsbruter >/dev/null 2>&1; then
+            echo -e "${BOLD_WHITE}Choose dnsbruter wordlist:${NC}\n${YELLOW}1${NC} = subs-dnsbruter-small.txt (faster)\n${YELLOW}2${NC} = subs-dnsbruter-medium.txt (deeper, default)"
+            read -p "Enter choice [1-2]: " dns_wl_choice
+            case "$dns_wl_choice" in
+                1) DNSBRUTER_WORDLIST="subs-dnsbruter-small.txt" ;;
+                2|"") DNSBRUTER_WORDLIST="subs-dnsbruter-medium.txt" ;;
+                *) DNSBRUTER_WORDLIST="subs-dnsbruter-medium.txt" ;;
+            esac
+            if [ ! -f "$DNSBRUTER_WORDLIST" ]; then
+                echo -e "${YELLOW}Selected wordlist '$DNSBRUTER_WORDLIST' not found. Falling back to subs-dnsbruter-medium.txt${NC}"
+                DNSBRUTER_WORDLIST="subs-dnsbruter-medium.txt"
+            fi
+            run_with_retry "dnsbruter -d \"$domain_name\" -w $DNSBRUTER_WORDLIST -c 300 -wt 100 -rt 800 -wd -ws wild.txt -o output-dnsbruter.txt" || echo -e "${YELLOW}dnsbruter failed, continuing...${NC}"
+        else
+            echo -e "${YELLOW}dnsbruter not found, skipping.${NC}"
+        fi
+        sleep 5
+
+        # Step 7: Active brute crawling domains
+        show_progress "Active brute crawling domains"
+        if command -v subdominator >/dev/null 2>&1; then
+            subdominator -d "$domain_name" -o output-subdominator.txt || echo -e "${YELLOW}subdominator failed, continuing...${NC}"
+        else
+            echo -e "${YELLOW}subdominator not found, skipping.${NC}"
+        fi
+        sleep 5
+
+        # Step 8: Merging all domain discovery results
+        show_progress "Merging all domain discovery results into one file"
+        temp_merge_file="temp-all-domains.txt"
+        > "$temp_merge_file"
+
+        # Add all available output files to the merge (and report counts)
+        [ -f "output-subfinder.txt" ] && { cat output-subfinder.txt >> "$temp_merge_file"; echo -e "${BOLD_WHITE}subfinder:${NC} $(file_count output-subfinder.txt)"; }
+        [ -f "output-assetfinder.txt" ] && { cat output-assetfinder.txt >> "$temp_merge_file"; echo -e "${BOLD_WHITE}assetfinder:${NC} $(file_count output-assetfinder.txt)"; }
+        [ -f "output-amass.txt" ] && { cat output-amass.txt >> "$temp_merge_file"; echo -e "${BOLD_WHITE}amass:${NC} $(file_count output-amass.txt)"; }
+        [ -f "output-findomain.txt" ] && { cat output-findomain.txt >> "$temp_merge_file"; echo -e "${BOLD_WHITE}findomain:${NC} $(file_count output-findomain.txt)"; }
+        [ -f "output-chaos.txt" ] && { cat output-chaos.txt >> "$temp_merge_file"; echo -e "${BOLD_WHITE}chaos:${NC} $(file_count output-chaos.txt)"; }
+        [ -f "output-dnsbruter.txt" ] && { cat output-dnsbruter.txt >> "$temp_merge_file"; echo -e "${BOLD_WHITE}dnsbruter:${NC} $(file_count output-dnsbruter.txt)"; }
+        [ -f "output-subdominator.txt" ] && { cat output-subdominator.txt >> "$temp_merge_file"; echo -e "${BOLD_WHITE}subdominator:${NC} $(file_count output-subdominator.txt)"; }
+        
+        # Normalize, lowercase, and dedupe for breadth
+        if [ ! -s "$temp_merge_file" ]; then
+            echo -e "${YELLOW}No tool-based results found. Attempting passive HTTP sources (no installs required)...${NC}"
+
+            # Ensure curl exists
+            if command -v curl >/dev/null 2>&1; then
+                # 1) Hackertarget (CSV: domain,ip)
+                curl -s "https://api.hackertarget.com/hostsearch/?q=${domain_name}" | cut -d, -f1 >> "$temp_merge_file" 2>/dev/null || true
+
+                # 2) RapidDNS (HTML table)
+                curl -s "https://rapiddns.io/subdomain/${domain_name}?full=1" | grep -oP '(?<=<td>)[A-Za-z0-9.-]+\.${domain_name}(?=</td>)' >> "$temp_merge_file" 2>/dev/null || true
+
+                # 3) crt.sh JSON (name_value fields)
+                curl -s "https://crt.sh/?q=%25.${domain_name}&output=json" \
+                  | grep -oP '"name_value":"[^"]+"' \
+                  | cut -d '"' -f4 \
+                  | tr '\\n' '\n' \
+                  >> "$temp_merge_file" 2>/dev/null || true
             else
-                echo "Error: output-subdominator.txt not found. Proceeding with output-dnsbruter.txt only."
-                mv output-dnsbruter.txt "${domain_name}-domains.txt"
+                echo -e "${YELLOW}curl not found; skipping HTTP passive sources.${NC}"
             fi
         fi
-        # Step 4: Removing old temporary files
+
+        if [ -s "$temp_merge_file" ]; then
+            awk '{gsub(/^https?:\/\//, ""); sub(/^www\./, ""); print tolower($0)}' "$temp_merge_file" | LC_ALL=C sort ${SORT_PARALLEL_ARG} -u > "${domain_name}-domains.txt"
+            echo -e "${BOLD_BLUE}Successfully merged and normalized domain discovery results.${NC}"
+            echo -e "${BOLD_WHITE}Total unique subdomains:${NC} $(file_count "${domain_name}-domains.txt")"
+        else
+            echo -e "${RED}No domains discovered automatically.${NC}"
+            echo -e "${YELLOW}Tip: Provide your own list named ${domain_name}-domains.txt and rerun, or install discovery tools (subfinder/assetfinder/amass/findomain/chaos).${NC}"
+            # Create empty file to allow workflow to continue gracefully
+            : > "${domain_name}-domains.txt"
+        fi
+        
+        # Step 9: Removing old temporary files
         show_progress "Removing old temporary files"
-        [ -f "output-dnsbruter.txt" ] && rm output-dnsbruter.txt || handle_error "Removing output-dnsbruter.txt"
-        [ -f "output-subdominator.txt" ] && rm output-subdominator.txt || handle_error "Removing output-subdominator.txt"
+        [ -f "output-subfinder.txt" ] && rm output-subfinder.txt
+        [ -f "output-assetfinder.txt" ] && rm output-assetfinder.txt
+        [ -f "output-amass.txt" ] && rm output-amass.txt
+        [ -f "output-findomain.txt" ] && rm output-findomain.txt
+        [ -f "output-chaos.txt" ] && rm output-chaos.txt
+        [ -f "output-dnsbruter.txt" ] && rm output-dnsbruter.txt
+        [ -f "output-subdominator.txt" ] && rm output-subdominator.txt
         sleep 3
     else
-        echo -e "${RED}Invalid choice entered. Please run the script again and choose Y or N.${NC}"
+        echo -e "${RED}❌ Invalid choice! Please enter Y or N only.${NC}"
+        echo -e "${YELLOW}Y = Use your own domain list${NC}"
+        echo -e "${YELLOW}N = Auto-discover domains${NC}"
         exit 1
     fi
 
@@ -1443,7 +1784,17 @@ sleep 5
 
 # Step 2y1: Filtering valid domain names
 show_progress "Filtering valid domain names"
-grep -oP 'http[^\s]*' "subprober-${domain_name}-domains.txt" > output-domains.txt || handle_error "grep valid domains"
+# Check if the subprober output file exists and has content
+if [ ! -f "subprober-${domain_name}-domains.txt" ] || [ ! -s "subprober-${domain_name}-domains.txt" ]; then
+    echo -e "${YELLOW}Warning: subprober output file is empty or missing. Creating empty output file.${NC}"
+    touch output-domains.txt
+else
+    # Try multiple patterns to extract URLs from subprober output
+    grep -oP 'https?://[^\s]*' "subprober-${domain_name}-domains.txt" > output-domains.txt 2>/dev/null || \
+    grep -oP 'http[^\s]*' "subprober-${domain_name}-domains.txt" > output-domains.txt 2>/dev/null || \
+    grep -v '^$' "subprober-${domain_name}-domains.txt" > output-domains.txt 2>/dev/null || \
+    touch output-domains.txt
+fi
 sleep 3
 
 # Step 2y2: Replacing with valid domains
@@ -1486,7 +1837,7 @@ sleep 3
 
 
     # New message for the user with Y/N option
-read -p "$(echo -e "${BOLD_WHITE}Your domain file has been created. Would you like to continue scanning your target domain, including all its subdomains? If so, please enter 'Y'. If you prefer to modify the domain file first, so you can delete these and add your domains, enter 'N', and you can manually proceed with step 4 afterwards. Do you want to continue scanning with all subdomains (Y/N)?: ${NC}")" continue_scan
+read -p "$(echo -e "${BOLD_WHITE}Domain list ready.${NC} ${BOLD_BLUE}Continue to crawl all discovered subdomains now?${NC}\n${YELLOW}Y${NC} = Continue to Step 4 (URL Crawling)\n${YELLOW}N${NC} = I'll edit ${domain_name}-domains.txt first and run Step 4 later\n${BOLD_WHITE}Your choice (Y/N): ${NC}")" continue_scan
 if [[ "$continue_scan" =~ ^[Yy]$ ]]; then
     skip_order_check_for_option_4=true
     echo -e "${BOLD_BLUE}Automatically continuing with step 4: URL Crawling and Filtering...${NC}"
@@ -1503,7 +1854,7 @@ run_step_4() {
     echo -e "${BOLD_WHITE}You selected: URL Crawling and Filtering for $domain_name${NC}"
 
     # Ask user if they want to use their own crawled links file
-    echo -e "${BOLD_WHITE}Do you want to use your own crawled links file? (Y/N)${NC}"
+    echo -e "${BOLD_WHITE}Use your own pre-crawled links file?${NC}\n${YELLOW}Y${NC} = I have ${domain_name}-links-final.txt\n${YELLOW}N${NC} = Crawl now with built-in tools (recommended)"
     read -r use_own_links_file
 
     if [[ "$use_own_links_file" =~ ^[Yy]$ ]]; then
@@ -1549,7 +1900,13 @@ run_step_4() {
 
     # Step 2: Crawling with Hakrawler
     show_progress "Crawling links with Hakrawler"
-    cat "${domain_name}-domains.txt" | hakrawler -d 3 | tee -a "${domain_name}-hakrawler.txt" || handle_error "Hakrawler crawl"
+    # Expand seeds to include both scheme and www-variants to avoid scope misses on redirects
+    awk '{
+        host=$0; gsub(/^https?:\/\//, "", host);
+        sub(/^www\./, "", host);
+        print "http://" host; print "https://" host; print "http://www." host; print "https://www." host;
+    }' "${domain_name}-domains.txt" | sort -u > "${domain_name}-hakrawler-seeds.txt"
+    cat "${domain_name}-hakrawler-seeds.txt" | hakrawler -d 3 -subs -timeout 30 -u | tee -a "${domain_name}-hakrawler.txt" || handle_error "Hakrawler crawl"
     sleep 3
 
     # Step 2.1: Crawling with URLFinder
@@ -1560,7 +1917,7 @@ run_step_4() {
 
     # Step 3: Crawling with Katana
     show_progress "Crawling links with Katana"
-    cat "${domain_name}-domains.txt" | katana -jc | tee -a "${domain_name}-katana.txt" || handle_error "Katana crawl"
+    cat "${domain_name}-domains.txt" | katana -jc -ef png,jpg,jpeg,gif,css,svg,ico -d 5 | tee -a "${domain_name}-katana.txt" || handle_error "Katana crawl"
     sleep 3
 
     # Step 4: Crawling with Waybackurls
@@ -1570,14 +1927,91 @@ run_step_4() {
 
     # Step 5: Crawling with Gau
 show_progress "Crawling links with Gau"
-rm -r /root/.gau.toml
-rm -r /home/$(whoami)/.gau.toml
-# Perform crawling with Gau and save results
-cat "${domain_name}-domains.txt" | gau | tee -a "${domain_name}-gau.txt" || handle_error "Gau crawl"
+    # Provide a local empty config to avoid permission errors/warnings
+    mkdir -p .config
+    : > .config/gau.toml
+    XDG_CONFIG_HOME="$(pwd)/.config" \
+    cat "${domain_name}-domains.txt" | gau --providers wayback,otx,commoncrawl | tee -a "${domain_name}-gau.txt" || handle_error "Gau crawl"
+    sleep 3
 
+    # Step 6: HTTP probing with httpx (ProjectDiscovery). Avoid python httpx CLI conflicts.
+    show_progress "HTTP probing with httpx"
+    PD_HTTPX_BIN="$(find_pd_httpx)"
+    if [ -z "$PD_HTTPX_BIN" ]; then
+        echo -e "${YELLOW}ProjectDiscovery httpx not found; skipping httpx step.${NC}"
+    else
+        # Use flags compatible across versions
+        cat "${domain_name}-domains.txt" | "$PD_HTTPX_BIN" -silent -mc 200,201,202,204,301,302,304,307,308,400,401,403,405,500,502,503,504 -title -tech-detect -status-code -follow-redirects -random-agent -retries 2 -timeout 10 -o "${domain_name}-httpx.txt" || echo -e "${YELLOW}httpx failed, continuing...${NC}"
+    fi
+    sleep 3
+
+    # Step 7: HTTP probing with httprobe
+    show_progress "HTTP probing with httprobe"
+    cat "${domain_name}-domains.txt" | httprobe -c 50 -t 3000 > "${domain_name}-httprobe.txt" || handle_error "httprobe"
+    sleep 3
+
+    # Step 8: Directory brute forcing with meg
+    show_progress "Directory brute forcing with meg"
+    meg / "${domain_name}-domains.txt" "${domain_name}-meg" || handle_error "meg"
+    [ -f "${domain_name}-meg/index" ] && cat "${domain_name}-meg/index" > "${domain_name}-meg.txt" || echo "meg output not found"
+    sleep 3
+
+    # Step 9: Additional URL discovery with paramspider
+    show_progress "Parameter discovery with paramspider"
+    if command -v paramspider >/dev/null 2>&1; then
+        paramspider -d "$domain_name" -o "${domain_name}-paramspider.txt" || echo -e "${YELLOW}paramspider failed, continuing...${NC}"
+    else
+        echo -e "${YELLOW}paramspider not found, trying python -m paramspider fallback...${NC}"
+        if python3 -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('paramspider') else 1)"; then
+            python3 -m paramspider -d "$domain_name" -o "${domain_name}-paramspider.txt" || echo -e "${YELLOW}paramspider module failed, continuing...${NC}"
+        else
+            echo -e "${YELLOW}ParamSpider not installed in current environment. Attempting install (source) in venv...${NC}"
+            mkdir -p .tools && {
+                if [ ! -d .tools/paramspider ]; then
+                    if command -v git >/dev/null 2>&1; then
+                        git clone --depth 1 https://github.com/devanshbatham/paramspider .tools/paramspider >/dev/null 2>&1 || true
+                    fi
+                fi
+                if [ -d .tools/paramspider ]; then
+                    python3 -m pip install .tools/paramspider --quiet >/dev/null 2>&1 || true
+                fi
+            }
+            if command -v paramspider >/dev/null 2>&1; then
+                paramspider -d "$domain_name" -o "${domain_name}-paramspider.txt" || echo -e "${YELLOW}paramspider still failed after install, skipping...${NC}"
+            elif python3 -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('paramspider') else 1)"; then
+                python3 -m paramspider -d "$domain_name" -o "${domain_name}-paramspider.txt" || echo -e "${YELLOW}paramspider still failed after install, skipping...${NC}"
+            else
+                echo -e "${YELLOW}ParamSpider installation failed; skipping this step.${NC}"
+            fi
+        fi
+    fi
+    sleep 3
+
+    # Step 10: Additional URL discovery with waybackpy
+    show_progress "Historical URL discovery with waybackpy"
+    python3 - "$domain_name" > "${domain_name}-waybackpy.txt" <<'PY'
+import sys
+domain = sys.argv[1].strip()
+if not domain.startswith("http"):
+    domain = f"https://{domain}"
+try:
+    from waybackpy import Url
+    u = Url(domain, "Mozilla/5.0 (FagunXssRecon)")
+    for link in u.known_urls():
+        print(link)
+except Exception as e:
+    # Fail softly to keep the pipeline running
+    pass
+PY
 sleep 3
 
 echo -e "${BOLD_BLUE}Crawling and filtering URLs completed successfully. Output files created for each tool.${NC}"
+echo -e "${BOLD_WHITE}gospider:${NC} $(file_count "${domain_name}-gospider.txt")"
+echo -e "${BOLD_WHITE}hakrawler:${NC} $(file_count "${domain_name}-hakrawler.txt")"
+echo -e "${BOLD_WHITE}urlfinder:${NC} $(file_count "${domain_name}-urlfinder.txt")"
+echo -e "${BOLD_WHITE}katana:${NC} $(file_count "${domain_name}-katana.txt")"
+echo -e "${BOLD_WHITE}waybackurls:${NC} $(file_count "${domain_name}-waybackurls.txt")"
+echo -e "${BOLD_WHITE}gau:${NC} $(file_count "${domain_name}-gau.txt")"
     
     # Step 6: Filter invalid links on Gospider and Hakrawler
     show_progress "Filtering invalid links on Gospider & Hakrawler & UrlFinder"
@@ -1611,6 +2045,13 @@ echo -e "${BOLD_BLUE}Crawling and filtering URLs completed successfully. Output 
     uro -i "${domain_name}-gau.txt" -o urogau.txt &
     uro_pid_gau=$!
 
+    # Process new tools with URO
+    [ -f "${domain_name}-httpx.txt" ] && uro -i "${domain_name}-httpx.txt" -o urohttpx.txt &
+    [ -f "${domain_name}-httprobe.txt" ] && uro -i "${domain_name}-httprobe.txt" -o urohttprobe.txt &
+    [ -f "${domain_name}-meg.txt" ] && uro -i "${domain_name}-meg.txt" -o uromeg.txt &
+    [ -f "${domain_name}-paramspider.txt" ] && uro -i "${domain_name}-paramspider.txt" -o uroparamspider.txt &
+    [ -f "${domain_name}-waybackpy.txt" ] && uro -i "${domain_name}-waybackpy.txt" -o urowaybackpy.txt &
+
     # Monitor the processes
     while kill -0 $uro_pid_gospider 2> /dev/null || kill -0 $uro_pid_hakrawler 2> /dev/null || \
           kill -0 $uro_pid_katana 2> /dev/null || kill -0 $uro_pid_waybackurls 2> /dev/null || \
@@ -1623,14 +2064,30 @@ echo -e "${BOLD_BLUE}Crawling and filtering URLs completed successfully. Output 
 echo -e "${BOLD_BLUE}URO processing completed. Files created successfully.${NC}"
 sleep 3
 
-    # Step 9: Remove all previous files
+    # Step 12: Remove all previous files
 show_progress "Removing all previous files"
-sudo rm -r "${domain_name}-gospider1.txt" "${domain_name}-hakrawler1.txt" "${domain_name}-katana.txt" "${domain_name}-waybackurls.txt" "${domain_name}-gau.txt" "${domain_name}-urlfinder1.txt"
+sudo rm -r "${domain_name}-gospider1.txt" "${domain_name}-hakrawler1.txt" "${domain_name}-katana.txt" "${domain_name}-waybackurls.txt" "${domain_name}-gau.txt" "${domain_name}-urlfinder1.txt" "${domain_name}-httpx.txt" "${domain_name}-httprobe.txt" "${domain_name}-meg.txt" "${domain_name}-paramspider.txt" "${domain_name}-waybackpy.txt"
 sleep 3
 
-# Step 10: Merge all URO files into one final file
+# Step 13: Merge all URO files into one final file
 show_progress "Merging all URO files into one final file"
-cat urogospider.txt urohakrawler.txt urokatana.txt urowaybackurls.txt urogau.txt urourlfinder.txt > "${domain_name}-links-final.txt"
+temp_merge_file="temp-all-uro.txt"
+> "$temp_merge_file"
+
+# Add all available URO output files to the merge
+[ -f "urogospider.txt" ] && cat urogospider.txt >> "$temp_merge_file"
+[ -f "urohakrawler.txt" ] && cat urohakrawler.txt >> "$temp_merge_file"
+[ -f "urokatana.txt" ] && cat urokatana.txt >> "$temp_merge_file"
+[ -f "urowaybackurls.txt" ] && cat urowaybackurls.txt >> "$temp_merge_file"
+[ -f "urogau.txt" ] && cat urogau.txt >> "$temp_merge_file"
+[ -f "urourlfinder.txt" ] && cat urourlfinder.txt >> "$temp_merge_file"
+[ -f "urohttpx.txt" ] && cat urohttpx.txt >> "$temp_merge_file"
+[ -f "urohttprobe.txt" ] && cat urohttprobe.txt >> "$temp_merge_file"
+[ -f "uromeg.txt" ] && cat uromeg.txt >> "$temp_merge_file"
+[ -f "uroparamspider.txt" ] && cat uroparamspider.txt >> "$temp_merge_file"
+[ -f "urowaybackpy.txt" ] && cat urowaybackpy.txt >> "$temp_merge_file"
+
+mv "$temp_merge_file" "${domain_name}-links-final.txt"
     
 # Create new folder 'urls' and assign permissions
 show_progress "Creating 'urls' directory and setting permissions"
@@ -1751,7 +2208,8 @@ run_step_5() {
 
     # Step 26: Filtering valid URLS
     show_progress "Filtering valid URLS"
-    grep -oP 'http[^\s]*' "${domain_name}-links-alive.txt" > ${domain_name}-links-valid.txt || handle_error "grep valid urls"
+    # Accept both scheme-less and schemed URLs; keep only http(s)
+    awk '{u=$0; if(u!~ /^https?:\/\//){u="http://"u}; print u}' "${domain_name}-links-alive.txt" | grep -oP 'https?://[^\s]+' > ${domain_name}-links-valid.txt || handle_error "grep valid urls"
     sleep 5
 
     # Step 27: Removing intermediate file and renaming final output
@@ -1923,7 +2381,8 @@ run_step_7() {
 
     # Step 1: Filtering URLs with query strings
     show_progress "Filtering URLs with query strings"
-    grep '=' urls-ready.txt > "$domain_name-query.txt"
+    # Keep URLs with query strings and also common parameter-like paths
+    { grep '=' urls-ready.txt; grep -E '/[^?]+/(search|query|redirect|sso|login|logout|return|next)/' urls-ready.txt; } | awk '!seen[$0]++' > "$domain_name-query.txt"
     sleep 5
     echo -e "${BOLD_BLUE}Filtering completed. Query URLs saved as ${domain_name}-query.txt.${NC}"
 
@@ -2517,10 +2976,104 @@ if [[ -f $reflection_script ]]; then
     fi
 }
 
+# Function to run Advanced XSS Pipeline option
+run_advanced_xss_pipeline_option() {
+    echo -e "${BOLD_WHITE}You selected: Advanced XSS Pipeline (gau|gf|uro|Gxss|kxss)${NC}"
+    
+    # Check if domain name is set
+    if [ -z "$domain_name" ]; then
+        echo -e "${RED}Domain name is not set. Please select option 2 to set the domain name first.${NC}"
+        return 1
+    fi
+    
+    # Check if we have URLs to process
+    local input_file=""
+    if [ -f "${domain_name}-query.txt" ]; then
+        input_file="${domain_name}-query.txt"
+        echo -e "${BOLD_BLUE}Using existing query URLs from ${domain_name}-query.txt${NC}"
+    elif [ -f "urls-ready.txt" ]; then
+        input_file="urls-ready.txt"
+        echo -e "${BOLD_BLUE}Using existing URLs from urls-ready.txt${NC}"
+    elif [ -f "${domain_name}-ALL-links.txt" ]; then
+        input_file="${domain_name}-ALL-links.txt"
+        echo -e "${BOLD_BLUE}Using existing URLs from ${domain_name}-ALL-links.txt${NC}"
+    else
+        echo -e "${RED}No URL files found. Please run previous steps first to generate URLs.${NC}"
+        echo -e "${YELLOW}Required files: ${domain_name}-query.txt, urls-ready.txt, or ${domain_name}-ALL-links.txt${NC}"
+        return 1
+    fi
+    
+    # Create output file for final results
+    local output_file="xss-urls.txt"
+    
+    echo -e "${BOLD_BLUE}Starting Advanced XSS Pipeline on $input_file...${NC}"
+    echo -e "${YELLOW}This pipeline will:${NC}"
+    echo -e "${YELLOW}1. Filter URLs with gf xss patterns${NC}"
+    echo -e "${YELLOW}2. Remove duplicates with uro${NC}"
+    echo -e "${YELLOW}3. Check for reflected parameters with Gxss${NC}"
+    echo -e "${YELLOW}4. Identify unfiltered characters with kxss${NC}"
+    echo -e "${YELLOW}5. Save intermediate results with tee${NC}"
+    echo -e "${YELLOW}6. Refine and validate results${NC}"
+    echo -e "${YELLOW}7. Run reflection check on results${NC}"
+    
+    # Run the advanced XSS pipeline
+    if run_advanced_xss_pipeline "$input_file" "$output_file"; then
+        echo -e "${BOLD_GREEN}Advanced XSS Pipeline completed successfully!${NC}"
+        
+        # Validate that we have results
+        if [ -f "$output_file" ] && [ -s "$output_file" ]; then
+            local result_count=$(wc -l < "$output_file")
+            echo -e "${BOLD_WHITE}Pipeline results: ${RED}${result_count} URLs${NC}"
+        else
+            echo -e "${YELLOW}[!] Warning: Pipeline completed but no results in $output_file${NC}"
+        fi
+        
+        # Run reflection check on the pipeline results
+        echo -e "${BOLD_BLUE}Running reflection check on pipeline results...${NC}"
+        if [ -f "reflection.py" ]; then
+            echo -e "${BOLD_BLUE}Running reflection.py on $output_file...${NC}"
+            sudo python3 reflection.py "$output_file" --threads 3
+            echo -e "${BOLD_GREEN}Reflection check completed!${NC}"
+            
+            # Check if xss.txt was created and combine with pipeline results
+            if [ -f "xss.txt" ]; then
+                echo -e "${BOLD_BLUE}Found reflected URLs in xss.txt, combining with pipeline results...${NC}"
+                # Combine reflected URLs with pipeline results
+                cat "xss.txt" >> "$output_file"
+                # Remove duplicates and sort
+                sort -u "$output_file" > "${output_file}.tmp"
+                mv "${output_file}.tmp" "$output_file"
+                echo -e "${BOLD_GREEN}Combined reflected URLs and pipeline results saved to: $output_file${NC}"
+            else
+                echo -e "${YELLOW}[!] No reflected URLs found in xss.txt${NC}"
+            fi
+        else
+            echo -e "${RED}[!] reflection.py not found, skipping reflection check${NC}"
+        fi
+        
+        # Show final results count
+        if [ -f "$output_file" ]; then
+            local final_count=$(wc -l < "$output_file")
+            echo -e "${BOLD_WHITE}Total XSS-vulnerable URLs found: ${RED}${final_count}${NC}"
+        fi
+        
+        # Show intermediate results count
+        if [ -f "xss_output.txt" ]; then
+            local intermediate_count=$(wc -l < "xss_output.txt")
+            echo -e "${BOLD_WHITE}Intermediate results in xss_output.txt: ${RED}${intermediate_count}${NC}"
+        fi
+        
+        echo -e "${BOLD_GREEN}✅ All vulnerable URLs are now ready in xss-urls.txt for XSS testing!${NC}"
+        echo -e "${BOLD_BLUE}You can now use these URLs with your own XSS testing tools.${NC}"
+    else
+        echo -e "${RED}Advanced XSS Pipeline failed. Please check the logs and try again.${NC}"
+    fi
+}
+
 while true; do
     # Display options
     display_options
-    read -p "Enter your choice [1-12]: " choice
+    read -p "Enter your choice [1-10]: " choice
 
     # Check if the selected option is in the correct order
     if [[ $choice -ge 2 && $choice -le 8 && $choice -ne 4 ]]; then
@@ -2539,6 +3092,26 @@ while true; do
             read -p "Please enter a domain name (example.com): " domain_name
             echo -e "${BOLD_WHITE}You selected: Domain name set to $domain_name${NC}"
             last_completed_option=2
+
+            # Prompt for Chaos API key if missing
+            if [ -z "${PDCP_API_KEY:-}" ]; then
+                echo -e "${YELLOW}Chaos API key (PDCP_API_KEY) is not set.${NC}"
+                echo -e "${BOLD_WHITE}Why you need it:${NC} Chaos enriches passive subdomain discovery from ProjectDiscovery Cloud Platform."
+                echo -e "${BOLD_WHITE}How to get it:${NC}"
+                echo -e "  1) Open: https://cloud.projectdiscovery.io (sign in with GitHub/Google)"
+                echo -e "  2) Go to: Settings → API Keys → Create New Key"
+                echo -e "  3) Copy the key and paste below when prompted"
+                echo -e "${BOLD_WHITE}Manual setup later (optional):${NC} export PDCP_API_KEY=your_key_here"
+                read -p "Enter your Chaos API key now (or press Enter to skip): " input_pdcp
+                if [ -n "$input_pdcp" ]; then
+                    printf "%s\n" "$input_pdcp" > .pdcp_api_key
+                    PDCP_API_KEY="$input_pdcp"
+                    export PDCP_API_KEY
+                    echo -e "${BOLD_GREEN}Chaos API key saved to .pdcp_api_key and loaded for this session.${NC}"
+                else
+                    echo -e "${YELLOW}Skipping Chaos for now. You can add the key later to .pdcp_api_key or export PDCP_API_KEY.${NC}"
+                fi
+            fi
             
             # Automatically proceed to Step 3 after setting the domain name
             read -p "$(echo -e "${BOLD_WHITE}Do you want to proceed with domain enumeration and filtering for $domain_name (Y/N)?: ${NC}")" proceed_to_step_3
@@ -2594,7 +3167,7 @@ while true; do
             if [ -z "$domain_name" ]; then
                 echo "Domain name is not set. Please select option 2 to set the domain name."
             else
-                run_step_8
+                run_advanced_xss_pipeline_option
                 last_completed_option=8
             fi
             ;;
@@ -2602,20 +3175,12 @@ while true; do
             echo "Exiting script."
             exit 0
             ;;
-        10)
-            echo -e "${BOLD_WHITE}You selected: Guide to Deploying fagun on VPS Servers${NC}"
-            show_vps_info
-            ;;
-       11) # Execute Path-based XSS
+        10) # Execute Path-based XSS
             run_path_based_xss
-            last_completed_option=11
-            ;;
-        12) # Domains Search Input
-            run_domains_search_input
-            last_completed_option=12
+            last_completed_option=10
             ;;
         *)
-            echo "Invalid option. Please select a number between 1 and 11."
+            echo "Invalid option. Please select a number between 1 and 10."
             ;;
     esac
 done

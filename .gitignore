@@ -1,0 +1,9 @@
+.pdcp_api_key
+.venv/
+error.log
+*.log
+*.txt
+!README.md
+!*.py
+!FagunXssRecon.sh
+
