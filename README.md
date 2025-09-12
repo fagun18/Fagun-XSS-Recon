@@ -125,6 +125,49 @@ unzip findomain.zip && chmod +x findomain && sudo mv findomain /usr/local/bin/
 bash FagunXssRecon.sh
 ```
 
+### Windows 11 (WSL2) Setup
+
+If you are on Windows, run FagunXssRecon inside WSL2 (Ubuntu) for full Linux tooling compatibility.
+
+1) Install WSL and Ubuntu (PowerShell as Administrator):
+
+```powershell
+wsl --install -d Ubuntu
+wsl --set-default-version 2
+```
+
+Launch Ubuntu from Start Menu and create your Linux user.
+
+2) Access your Windows files from WSL:
+
+- Windows drives are mounted under `/mnt`. Example: `H:\xssorRecon` → `/mnt/h/xssorRecon`
+
+```bash
+cd /mnt/h/xssorRecon
+```
+
+3) Fix line endings and permissions (first run only):
+
+```bash
+sed -i 's/\r$//' FagunXssRecon.sh
+chmod +x FagunXssRecon.sh
+```
+
+4) Handle noexec mounts (if you see “cannot execute: required file not found”):
+
+```bash
+# Option A: run via bash
+bash ./FagunXssRecon.sh
+
+# Option B: copy to Linux home and run
+mkdir -p ~/xssorRecon && cp -f /mnt/h/xssorRecon/FagunXssRecon.sh ~/xssorRecon/
+cd ~/xssorRecon
+chmod +x FagunXssRecon.sh
+bash ./FagunXssRecon.sh
+```
+
+Tip: You can run from `~/xssorRecon` and read/write inputs/outputs under `/mnt/h/...` paths.
+
 ## Prerequisites
 
 - **Operating System**: Linux (Ubuntu/Debian/Kali) or Windows with WSL
