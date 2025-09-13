@@ -2024,11 +2024,11 @@ show_progress "Crawling links with Gau"
     # Step 9: Additional URL discovery with paramspider
     show_progress "Parameter discovery with paramspider"
     if command -v paramspider >/dev/null 2>&1; then
-        paramspider -d "$domain_name" -o "${domain_name}-paramspider.txt" || echo -e "${YELLOW}paramspider failed, continuing...${NC}"
+        paramspider -d "$domain_name" > "${domain_name}-paramspider.txt" 2>/dev/null || echo -e "${YELLOW}paramspider failed, continuing...${NC}"
     else
         echo -e "${YELLOW}paramspider not found, trying python -m paramspider fallback...${NC}"
         if python3 -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('paramspider') else 1)"; then
-            python3 -m paramspider -d "$domain_name" -o "${domain_name}-paramspider.txt" || echo -e "${YELLOW}paramspider module failed, continuing...${NC}"
+            python3 -m paramspider -d "$domain_name" > "${domain_name}-paramspider.txt" 2>/dev/null || echo -e "${YELLOW}paramspider module failed, continuing...${NC}"
         else
             echo -e "${YELLOW}ParamSpider not installed in current environment. Attempting install (source) in venv...${NC}"
             mkdir -p .tools && {
@@ -2042,9 +2042,9 @@ show_progress "Crawling links with Gau"
                 fi
             }
             if command -v paramspider >/dev/null 2>&1; then
-                paramspider -d "$domain_name" -o "${domain_name}-paramspider.txt" || echo -e "${YELLOW}paramspider still failed after install, skipping...${NC}"
+                paramspider -d "$domain_name" > "${domain_name}-paramspider.txt" 2>/dev/null || echo -e "${YELLOW}paramspider still failed after install, skipping...${NC}"
             elif python3 -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('paramspider') else 1)"; then
-                python3 -m paramspider -d "$domain_name" -o "${domain_name}-paramspider.txt" || echo -e "${YELLOW}paramspider still failed after install, skipping...${NC}"
+                python3 -m paramspider -d "$domain_name" > "${domain_name}-paramspider.txt" 2>/dev/null || echo -e "${YELLOW}paramspider still failed after install, skipping...${NC}"
             else
                 echo -e "${YELLOW}ParamSpider installation failed; skipping this step.${NC}"
             fi
@@ -2080,34 +2080,36 @@ echo -e "${BOLD_WHITE}gau:${NC} $(file_count "${domain_name}-gau.txt")"
     
     # Step 6: Filter invalid links on Gospider and Hakrawler
     show_progress "Filtering invalid links on Gospider & Hakrawler & UrlFinder"
-    grep -oP 'http[^\s]*' "${domain_name}-gospider.txt" > "${domain_name}-gospider1.txt"
-    grep -oP 'http[^\s]*' "${domain_name}-hakrawler.txt" > "${domain_name}-hakrawler1.txt"
-    grep -oP 'http[^\s]*' "${domain_name}-urlfinder.txt" > "${domain_name}-urlfinder1.txt"
+    [ -f "${domain_name}-gospider.txt" ] && grep -oP 'http[^\s]*' "${domain_name}-gospider.txt" > "${domain_name}-gospider1.txt" || touch "${domain_name}-gospider1.txt"
+    [ -f "${domain_name}-hakrawler.txt" ] && grep -oP 'http[^\s]*' "${domain_name}-hakrawler.txt" > "${domain_name}-hakrawler1.txt" || touch "${domain_name}-hakrawler1.txt"
+    [ -f "${domain_name}-urlfinder.txt" ] && grep -oP 'http[^\s]*' "${domain_name}-urlfinder.txt" > "${domain_name}-urlfinder1.txt" || touch "${domain_name}-urlfinder1.txt"
     sleep 3
 
     # Step 7: Remove old Gospider & Hakrawler & UrlFinder files
     show_progress "Removing old Gospider & Hakrawler & UrlFinder files"
-    rm -r "${domain_name}-gospider.txt" "${domain_name}-hakrawler.txt" "${domain_name}-urlfinder.txt"
+    [ -f "${domain_name}-gospider.txt" ] && rm -f "${domain_name}-gospider.txt"
+    [ -f "${domain_name}-hakrawler.txt" ] && rm -f "${domain_name}-hakrawler.txt"
+    [ -f "${domain_name}-urlfinder.txt" ] && rm -f "${domain_name}-urlfinder.txt"
     sleep 3
 
     # Step 8: Filter similar URLs with URO tool
     show_progress "Filtering similar URLs with URO tool"
-    uro -i "${domain_name}-gospider1.txt" -o urogospider.txt &
+    [ -f "${domain_name}-gospider1.txt" ] && [ -s "${domain_name}-gospider1.txt" ] && uro -i "${domain_name}-gospider1.txt" -o urogospider.txt &
     uro_pid_gospider=$!
 
-    uro -i "${domain_name}-hakrawler1.txt" -o urohakrawler.txt &
+    [ -f "${domain_name}-hakrawler1.txt" ] && [ -s "${domain_name}-hakrawler1.txt" ] && uro -i "${domain_name}-hakrawler1.txt" -o urohakrawler.txt &
     uro_pid_hakrawler=$!
 
-    uro -i "${domain_name}-urlfinder1.txt" -o urourlfinder.txt &
+    [ -f "${domain_name}-urlfinder1.txt" ] && [ -s "${domain_name}-urlfinder1.txt" ] && uro -i "${domain_name}-urlfinder1.txt" -o urourlfinder.txt &
     uro_pid_urlfinder=$!
 
-    uro -i "${domain_name}-katana.txt" -o urokatana.txt &
+    [ -f "${domain_name}-katana.txt" ] && [ -s "${domain_name}-katana.txt" ] && uro -i "${domain_name}-katana.txt" -o urokatana.txt &
     uro_pid_katana=$!
 
-    uro -i "${domain_name}-waybackurls.txt" -o urowaybackurls.txt &
+    [ -f "${domain_name}-waybackurls.txt" ] && [ -s "${domain_name}-waybackurls.txt" ] && uro -i "${domain_name}-waybackurls.txt" -o urowaybackurls.txt &
     uro_pid_waybackurls=$!
 
-    uro -i "${domain_name}-gau.txt" -o urogau.txt &
+    [ -f "${domain_name}-gau.txt" ] && [ -s "${domain_name}-gau.txt" ] && uro -i "${domain_name}-gau.txt" -o urogau.txt &
     uro_pid_gau=$!
 
     # Process new tools with URO
@@ -2131,7 +2133,9 @@ sleep 3
 
     # Step 12: Remove all previous files
 show_progress "Removing all previous files"
-sudo rm -r "${domain_name}-gospider1.txt" "${domain_name}-hakrawler1.txt" "${domain_name}-katana.txt" "${domain_name}-waybackurls.txt" "${domain_name}-gau.txt" "${domain_name}-urlfinder1.txt" "${domain_name}-httpx.txt" "${domain_name}-httprobe.txt" "${domain_name}-meg.txt" "${domain_name}-paramspider.txt" "${domain_name}-waybackpy.txt"
+for file in "${domain_name}-gospider1.txt" "${domain_name}-hakrawler1.txt" "${domain_name}-katana.txt" "${domain_name}-waybackurls.txt" "${domain_name}-gau.txt" "${domain_name}-urlfinder1.txt" "${domain_name}-httpx.txt" "${domain_name}-httprobe.txt" "${domain_name}-meg.txt" "${domain_name}-paramspider.txt" "${domain_name}-waybackpy.txt"; do
+    [ -f "$file" ] && rm -f "$file"
+done
 sleep 3
 
 # Step 13: Merge all URO files into one final file
@@ -2204,7 +2208,8 @@ run_step_5() {
 
     # Step 17: Removing old filtered file
     show_progress "Removing old filtered file"
-    rm -r ${domain_name}-links-clean.txt ${domain_name}-links-final.txt
+    [ -f "${domain_name}-links-clean.txt" ] && rm -f "${domain_name}-links-clean.txt"
+    [ -f "${domain_name}-links-final.txt" ] && rm -f "${domain_name}-links-final.txt"
     sleep 3
 
     # Step 18: Renaming new filtered file
@@ -2214,14 +2219,22 @@ run_step_5() {
 
     # Step 19: Running URO tool again to filter duplicate and similar URLs
     show_progress "Running URO tool again to filter duplicate and similar URLs"
-    uro -i "${domain_name}-links-clean.txt" -o "${domain_name}-uro.txt" &
-    uro_pid_clean=$!
+    if [ -f "${domain_name}-links-clean.txt" ] && [ -s "${domain_name}-links-clean.txt" ]; then
+        uro -i "${domain_name}-links-clean.txt" -o "${domain_name}-uro.txt" &
+        uro_pid_clean=$!
+    else
+        echo -e "${YELLOW}No URLs found in ${domain_name}-links-clean.txt, creating empty output file${NC}"
+        touch "${domain_name}-uro.txt"
+        uro_pid_clean=""
+    fi
 
     # Monitor the URO process
-    while kill -0 $uro_pid_clean 2> /dev/null; do
-        echo -e "${BOLD_BLUE}URO tool is still running for clean URLs...⌛️${NC}"
-        sleep 30  # Check every 30 seconds
-    done
+    if [ -n "$uro_pid_clean" ]; then
+        while kill -0 $uro_pid_clean 2> /dev/null; do
+            echo -e "${BOLD_BLUE}URO tool is still running for clean URLs...⌛️${NC}"
+            sleep 30  # Check every 30 seconds
+        done
+    fi
 
     echo -e "${BOLD_BLUE}URO processing completed. Files created successfully.${NC}"
     sleep 3
@@ -2232,7 +2245,7 @@ run_step_5() {
 
     # Step 20: Removing old file
     show_progress "Removing old file"
-    rm -r "${domain_name}-links-clean.txt"
+    [ -f "${domain_name}-links-clean.txt" ] && rm -f "${domain_name}-links-clean.txt"
     sleep 3
 
     # Step 21: Removing 99% similar parameters with bash command
@@ -2240,9 +2253,10 @@ run_step_5() {
     filtered_output="filtered_output.txt"
     if [[ ! -f "${domain_name}-uro.txt" ]]; then 
         echo "File not found! Please check the path and try again."
-        exit 1
+        touch "$filtered_output"
+    else
+        awk -F'[?&]' '{gsub(/:80/, "", $1); base_url=$1; params=""; for (i=2; i<=NF; i++) {split($i, kv, "="); if (kv[1] != "id") {params = params kv[1]; if (i < NF) {params = params "&";}}} full_url=base_url"?"params; if (!seen[full_url]++) {print $0 > "'"$filtered_output"'";}}' "${domain_name}-uro.txt"
     fi
-    awk -F'[?&]' '{gsub(/:80/, "", $1); base_url=$1; params=""; for (i=2; i<=NF; i++) {split($i, kv, "="); if (kv[1] != "id") {params = params kv[1]; if (i < NF) {params = params "&";}}} full_url=base_url"?"params; if (!seen[full_url]++) {print $0 > "'"$filtered_output"'";}}' "${domain_name}-uro.txt"
     sleep 5
 
     # Display the number of URLs in the filtered output file
@@ -2251,24 +2265,36 @@ run_step_5() {
 
     # Step 22: Removing old file
     show_progress "Removing old file"
-    rm -r "${domain_name}-uro.txt"
+    [ -f "${domain_name}-uro.txt" ] && rm -f "${domain_name}-uro.txt"
     sleep 3
 
     # Step 23: Rename to new file
     show_progress "Rename to new file"
-    mv filtered_output.txt "${domain_name}-links.txt"
+    if [ -f "filtered_output.txt" ]; then
+        mv filtered_output.txt "${domain_name}-links.txt"
+    else
+        touch "${domain_name}-links.txt"
+    fi
     sleep 3
 
     # Step 24: Filtering ALIVE URLS
     show_progress "Filtering ALIVE URLS"
     python3 -m venv .venv
     source .venv/bin/activate 
-    subprober -f "${domain_name}-links.txt" -sc -ar -o "${domain_name}-links-alive.txt" -nc -mc 200,201,202,204,301,302,304,307,308,403,500,504,401,407 -c 20 || handle_error "subprober"
+    if [ -f "${domain_name}-links.txt" ] && [ -s "${domain_name}-links.txt" ]; then
+        subprober -f "${domain_name}-links.txt" -sc -ar -o "${domain_name}-links-alive.txt" -nc -mc 200,201,202,204,301,302,304,307,308,403,500,504,401,407 -c 20 || echo -e "${YELLOW}subprober failed, creating empty output file${NC}"
+        if [ ! -f "${domain_name}-links-alive.txt" ]; then
+            touch "${domain_name}-links-alive.txt"
+        fi
+    else
+        echo -e "${YELLOW}No URLs found in ${domain_name}-links.txt, creating empty output file${NC}"
+        touch "${domain_name}-links-alive.txt"
+    fi
     sleep 5
 
     # Step 25: Removing old file
     show_progress "Removing old file"
-    rm -r ${domain_name}-links.txt
+    [ -f "${domain_name}-links.txt" ] && rm -f "${domain_name}-links.txt"
     sleep 3
 
     # Step 26: Filtering valid URLS
